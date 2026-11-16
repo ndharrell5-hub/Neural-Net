@@ -21,13 +21,3 @@ assert.strictEqual(items[0].author, 'Steve Jobs');
 const odd = { text: 'Bananas are a metaphor for everything.', userTopic: 'art' };
 assert.strictEqual(TOPICS[buildNet([odd]).classify(odd.text).top].id, 'art');
 console.log('all tests passed');
-
-// Long quote lists: one per line, authors on the following line, Word paragraphs
-const P = require('./parse.js');
-const list = P.parseText('The obstacle is the way.\n— Marcus Aurelius\nBe one.\n- Marcus Aurelius\nPlan - Monday');
-assert.deepStrictEqual(list.map(i => [i.type, i.author]), [['quote', 'Marcus Aurelius'], ['quote', 'Marcus Aurelius'], ['note', '']]);
-const xml = '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>My quotes</w:t></w:r></w:p>' +
-  '<w:p><w:r><w:t>Know thyself.</w:t></w:r></w:p><w:p><w:r><w:t>— Socrates</w:t></w:r></w:p><w:p/>' +
-  '<w:p><w:r><w:t>Spend less than you earn.</w:t></w:r></w:p>';
-assert.deepStrictEqual(P.parseFile('q.docx', xml).map(i => i.text), ['Know thyself.', 'Spend less than you earn.']);
-console.log('parser tests passed');

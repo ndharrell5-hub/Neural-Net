@@ -78,17 +78,15 @@
   <div class="sub">A small neural net that maps your notes &amp; quotes from philosophy to practical analysis.</div>
 
   <h2>Upload</h2>
-  <div id="drop" tabindex="0" role="button">Drop Word (.docx), .txt, .md, .csv or .json files<br>or click to choose</div>
-  <input id="file" type="file" multiple accept=".docx,.txt,.md,.markdown,.csv,.json,text/plain" hidden>
-  <div class="row">
-    <label for="ptype" class="sub" style="flex:none">Items are</label>
-    <select id="ptype"><option value="">auto-detected (note or quote)</option><option value="note">all notes</option><option value="quote">all quotes</option></select>
-  </div>
-  <div id="added" class="sub" style="margin-top:6px" role="status"></div>
+  <div id="drop" tabindex="0" role="button">Drop .txt .md .csv .json files<br>or click to choose</div>
+  <input id="file" type="file" multiple accept=".txt,.md,.markdown,.csv,.json,text/plain" hidden>
 
   <h2>Or paste</h2>
   <textarea id="paste" placeholder="One note or quote per paragraph.&#10;&#10;&quot;The obstacle is the way.&quot; — Marcus Aurelius"></textarea>
-  <div class="row"><button id="add">Add</button></div>
+  <div class="row">
+    <select id="ptype"><option value="">Auto-detect type</option><option value="note">All notes</option><option value="quote">All quotes</option></select>
+    <button id="add">Add</button>
+  </div>
 
   <h2>Topics</h2>
   <input id="search" type="search" placeholder="Search text…">
@@ -121,7 +119,6 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="nn.js"></script>
 <script src="parse.js"></script>
 <script type="importmap">
@@ -390,14 +387,11 @@ function renderTopics(counts) {
 }
 
 // ---------------- adding items ----------------
-function addItems(newOnes, from = 'pasted text') {
-  const added = $('added');
-  if (!newOnes.length) { added.textContent = `Found nothing to add in ${from}.`; return; }
+function addItems(newOnes) {
+  if (!newOnes.length) { status('Nothing found to add.'); return; }
   const seen = new Set(items.map(i => i.text));
   const fresh = newOnes.filter(i => !seen.has(i.text) && seen.add(i.text));
-  if (!fresh.length) { added.textContent = `Everything in ${from} is already on the map.`; return; }
-  const q = fresh.filter(i => i.type === 'quote').length, dup = newOnes.length - fresh.length;
-  added.textContent = `Added ${fresh.length} from ${from}: ${q} quotes, ${fresh.length - q} notes` + (dup ? ` (${dup} duplicates skipped)` : '') + '.';
+  if (!fresh.length) { status('Those are all on the map already.'); return; }
   items.push(...fresh); retrain();
   store.put(fresh).catch(saveFailed);
 }
@@ -409,26 +403,12 @@ $('add').onclick = () => {
 };
 
 async function readFiles(files) {
-  const all = [], problems = [];
-  const forced = $('ptype').value || undefined;
+  const all = [];
   for (const f of files) {
-    const ext = f.name.toLowerCase().split('.').pop();
-    try {
-      if (ext === 'doc') { problems.push(`${f.name} is an older Word format. In Word, use File → Save As → .docx, then upload that.`); continue; }
-      if (ext === 'pdf' || ext === 'pages') { problems.push(`${f.name}: export it as .docx or .txt first.`); continue; }
-      let content;
-      if (ext === 'docx') {
-        if (!window.JSZip) { problems.push(`Couldn't open ${f.name}: the Word reader didn't load. Check your connection and reload.`); continue; }
-        const zip = await window.JSZip.loadAsync(await f.arrayBuffer());
-        const doc = zip.file('word/document.xml');
-        if (!doc) { problems.push(`${f.name} doesn't look like a Word document.`); continue; }
-        content = await doc.async('string');
-      } else content = await f.text();
-      all.push(...window.Parse.parseFile(f.name, content, forced));
-    } catch (e) { problems.push(`Couldn't read ${f.name} (${e.message}).`); }
+    try { all.push(...window.Parse.parseFile(f.name, await f.text())); }
+    catch (e) { status(`Could not read ${f.name}: ${e.message}`); }
   }
-  addItems(all, files.length === 1 ? files[0].name : `${files.length} files`);
-  if (problems.length) $('added').textContent += ' ' + problems.join(' ');
+  addItems(all);
 }
 const drop = $('drop');
 drop.onclick = () => $('file').click();
