@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thought Spectrum</title>
+<style>
+  :root {
+    --bg: #0b0d12; --panel: rgba(18, 21, 28, 0.92); --line: #262b36;
+    --text: #d8dbe2; --muted: #7d8494; --accent: #9fb4ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; }
+  #scene { position: fixed; inset: 0; }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; backdrop-filter: blur(4px); }
+  #side { top: 12px; left: 12px; width: 300px; max-height: calc(100% - 24px); overflow-y: auto; }
+  #detail { top: 12px; right: 12px; width: 340px; max-height: calc(100% - 24px); overflow-y: auto; display: none; }
+  h1 { font-size: 14px; margin: 0 0 2px; letter-spacing: .04em; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 11px; }
+  textarea, input[type=search], select { width: 100%; background: #0f1218; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 6px; font: inherit; }
+  textarea { height: 84px; resize: vertical; }
+  button, .btn { background: #1b2030; color: var(--text); border: 1px solid #333a4a; border-radius: 5px; padding: 5px 10px;
+    font: inherit; cursor: pointer; display: inline-block; }
+  button:hover, .btn:hover { border-color: var(--accent); }
+  .row { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+  .row > select { flex: 1; }
+  #drop { border: 1px dashed #3a4152; border-radius: 6px; padding: 10px; text-align: center; color: var(--muted); cursor: pointer; }
+  #drop.over { border-color: var(--accent); color: var(--text); }
+  #topics { list-style: none; padding: 0; margin: 0; }
+  #topics li { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
+  #topics li:hover, #topics li.on { background: #1b2030; }
+  #topics .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  #topics .n { margin-left: auto; color: var(--muted); }
+  #status { color: var(--muted); font-size: 11px; margin-top: 10px; white-space: pre-line; }
+  .quote { font-style: italic; }
+  .bar { height: 6px; background: #1b2030; border-radius: 3px; overflow: hidden; margin: 2px 0 6px; }
+  .bar > div { height: 100%; }
+  .spec { position: relative; height: 8px; border-radius: 4px; margin: 6px 0 2px;
+    background: linear-gradient(90deg, #b48cff, #8cdcff, #b8ff8c, #ffd88c, #ff8c8c); }
+  .spec > i { position: absolute; top: -3px; width: 3px; height: 14px; background: #fff; border-radius: 2px; }
+  .ends { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+  .label3d { font-size: 11px; color: var(--text); background: rgba(11,13,18,.7); padding: 1px 6px; border-radius: 4px;
+    white-space: nowrap; pointer-events: none; }
+  .label3d.axis { color: var(--muted); letter-spacing: .12em; background: none; font-size: 12px; }
+  #tip { position: fixed; pointer-events: none; max-width: 280px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; display: none; font-size: 12px; }
+  #close { float: right; }
+  #toggle { display: none; }
+  @media (max-width: 720px) {
+    #side { left: 8px; right: 8px; width: auto; top: auto; bottom: 8px; max-height: 50%; }
+    #side.collapsed > :not(#toggle):not(h1) { display: none; }
+    #toggle { display: inline-block; float: right; }
+    #detail { left: 8px; right: 8px; width: auto; top: 8px; max-height: 45%; }
+  }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div id="tip"></div>
+
+<div id="side" class="panel">
+  <button id="toggle">▾</button>
+  <h1>THOUGHT SPECTRUM</h1>
+  <div class="sub">A small neural net that maps your notes &amp; quotes from philosophy to practical analysis.</div>
+
+  <h2>Upload</h2>
+  <div id="drop">Drop .txt .md .csv .json files<br>or click to choose</div>
+  <input id="file" type="file" multiple accept=".txt,.md,.markdown,.csv,.json,text/plain" hidden>
+
+  <h2>Or paste</h2>
+  <textarea id="paste" placeholder="One note or quote per paragraph.&#10;&#10;&quot;The obstacle is the way.&quot; — Marcus Aurelius"></textarea>
+  <div class="row">
+    <select id="ptype"><option value="">Auto-detect type</option><option value="note">All notes</option><option value="quote">All quotes</option></select>
+    <button id="add">Add</button>
+  </div>
+
+  <h2>Topics</h2>
+  <input id="search" type="search" placeholder="Search text…">
+  <ul id="topics" style="margin-top:6px"></ul>
+
+  <div class="row" style="margin-top:12px">
+    <button id="export">Export</button>
+    <button id="demo">Load sample</button>
+    <button id="clear">Clear all</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<div id="detail" class="panel">
+  <button id="close">×</button>
+  <div id="dtype" class="sub"></div>
+  <p id="dtext" style="margin:8px 0 4px"></p>
+  <div id="dauthor" class="sub"></div>
+  <h2>Placed as</h2>
+  <div id="dlabel"></div>
+  <div class="spec"><i id="dspec"></i></div>
+  <div class="ends"><span>philosophy</span><span>practical analysis</span></div>
+  <h2>Net's top guesses</h2>
+  <div id="dprobs"></div>
+  <h2>Teach the net</h2>
+  <div class="row"><select id="reassign"></select></div>
+  <div class="row"><button id="remove">Delete item</button></div>
+</div>
+
+<script src="nn.js"></script>
+<script src="parse.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const { TOPICS, buildNet } = window.NN;
+const $ = id => document.getElementById(id);
+const STORE = 'thought-spectrum-items-v1';
+
+// ---------------- state ----------------
+let items = [];
+try { items = JSON.parse(localStorage.getItem(STORE) || '[]'); } catch { items = []; }
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(items)); } catch {} };
+let net = null, filterTopic = null, query = '', selected = null;
+
+// ---------------- scene ----------------
+const host = $('scene');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+host.appendChild(renderer.domElement);
+const labels = new CSS2DRenderer();
+labels.domElement.style.cssText = 'position:absolute;inset:0;pointer-events:none';
+host.appendChild(labels.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0b0d12');
+scene.fog = new THREE.Fog('#0b0d12', 140, 320);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+camera.position.set(0, 50, 165);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = true; controls.autoRotateSpeed = 0.25;
+renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; });
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(40, 80, 60); scene.add(sun);
+
+const SPAN = 130;
+const xOf = s => (s - 0.5) * SPAN;
+// Topic hubs: x is their spot on the spectrum; y/z wind around the spine
+// so neighbouring topics don't overlap.
+const hubs = TOPICS.map((t, k) => {
+  const a = k * 2.4;
+  return new THREE.Vector3(xOf(t.pos), Math.sin(a) * 22, Math.cos(a) * 22);
+});
+
+// spine
+scene.add(new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(xOf(0) - 10, 0, 0), new THREE.Vector3(xOf(1) + 10, 0, 0)]),
+  new THREE.LineBasicMaterial({ color: 0x3a4152 })));
+const label = (text, pos, cls = '') => {
+  const d = document.createElement('div'); d.className = 'label3d ' + cls; d.textContent = text;
+  const o = new CSS2DObject(d); o.position.copy(pos); scene.add(o); return d;
+};
+label('PHILOSOPHY', new THREE.Vector3(xOf(0) - 16, -4, 0), 'axis');
+label('PRACTICAL ANALYSIS', new THREE.Vector3(xOf(1) + 22, -4, 0), 'axis');
+
+const hubLabels = TOPICS.map((t, k) => {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1.4, 24, 16),
+    new THREE.MeshStandardMaterial({ color: t.color, emissive: t.color, emissiveIntensity: 0.5, transparent: true, opacity: 0.45 }));
+  m.position.copy(hubs[k]); m.userData.topic = k; scene.add(m);
+  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(hubs[k].x, 0, 0), hubs[k]]),
+    new THREE.LineBasicMaterial({ color: 0x262b36 })));
+  return label(t.name, hubs[k].clone().add(new THREE.Vector3(0, 2.6, 0)));
+});
+
+const itemGroup = new THREE.Group(); scene.add(itemGroup);
+const noteGeo = new THREE.SphereGeometry(0.9, 12, 8);
+const quoteGeo = new THREE.OctahedronGeometry(1.25);
+let meshes = [];
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h); labels.setSize(w, h);
+  camera.aspect = w / h;
+  // keep the map centred in the space beside the side panel on wide screens
+  if (w > 720) camera.setViewOffset(w, h, -160, 0, w, h); else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+// ---------------- net + layout ----------------
+function status(msg) { $('status').textContent = msg; }
+
+function retrain() {
+  status('Training the network…');
+  setTimeout(() => {
+    const t0 = performance.now();
+    net = buildNet(items);
+    const ms = Math.round(performance.now() - t0);
+    for (const it of items) it.c = net.classify(it.text);
+    status(`Network: ${window.NN.DIM} inputs → ${net.H} hidden → ${TOPICS.length} topics\n` +
+      `${items.length} items · ${items.filter(i => i.userTopic).length} taught · trained in ${ms} ms · loss ${net.loss.toFixed(3)}`);
+    layout();
+  }, 30);
+}
+
+// Two fixed projections of the hidden layer give each item a personal offset,
+// so items the net "thinks about" similarly sit near each other.
+const proj = [0, 1].map(s => Array.from({ length: 64 }, (_, j) => Math.sin(j * 12.9898 + s * 78.233) * 43758.5453 % 1));
+
+function jitter(str) { let h = 9; for (const ch of String(str)) h = Math.imul(h ^ ch.charCodeAt(0), 2654435761); return ((h >>> 0) % 1000) / 1000; }
+
+function layout() {
+  itemGroup.clear(); meshes = [];
+  const counts = new Array(TOPICS.length).fill(0);
+  for (const it of items) {
+    const c = it.c; if (!c) continue;
+    const k = it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : c.top;
+    counts[k]++;
+    const p = new THREE.Vector3();
+    c.p.forEach((v, j) => p.addScaledVector(hubs[j], v));
+    if (it.userTopic) p.lerp(hubs[k], 0.7);
+    // Orbit the item around where the net placed it: the angle comes from the
+    // hidden layer (similar thoughts share a side), nudged per item so twins don't overlap.
+    const oy = c.h.reduce((s, v, j) => s + v * proj[0][j], 0);
+    const oz = c.h.reduce((s, v, j) => s + v * proj[1][j], 0);
+    const ang = Math.atan2(oz, oy) + (jitter(it.id) - 0.5) * 1.4;
+    const rad = 4 + Math.min(Math.hypot(oy, oz), 6) + jitter(it.id + 'r') * 3;
+    p.y += Math.cos(ang) * rad; p.z += Math.sin(ang) * rad;
+    p.x = xOf(it.userTopic ? TOPICS[k].pos : c.spectrum) + (jitter(it.id + 'x') - 0.5) * 6;
+    const color = new THREE.Color(TOPICS[k].color);
+    const m = new THREE.Mesh(it.type === 'quote' ? quoteGeo : noteGeo,
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25, transparent: true }));
+    m.position.copy(p); m.userData.item = it; m.userData.k = k;
+    itemGroup.add(m); meshes.push(m);
+    const link = new THREE.Line(new THREE.BufferGeometry().setFromPoints([p, hubs[k]]),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.18 }));
+    link.userData.mesh = m; m.userData.link = link; itemGroup.add(link);
+  }
+  hubLabels.forEach((d, k) => d.textContent = `${TOPICS[k].name}  ${counts[k] || ''}`);
+  renderTopics(counts);
+  applyFilter();
+}
+
+function applyFilter() {
+  const q = query.toLowerCase();
+  for (const m of meshes) {
+    const it = m.userData.item;
+    const show = (filterTopic === null || m.userData.k === filterTopic) &&
+      (!q || it.text.toLowerCase().includes(q) || (it.author || '').toLowerCase().includes(q));
+    m.material.opacity = show ? 1 : 0.08;
+    m.userData.link.material.opacity = show ? 0.22 : 0.02;
+    m.scale.setScalar(it === selected ? 1.8 : 1);
+  }
+}
+
+function renderTopics(counts) {
+  const ul = $('topics'); ul.innerHTML = '';
+  TOPICS.forEach((t, k) => {
+    const li = document.createElement('li');
+    li.className = filterTopic === k ? 'on' : '';
+    li.innerHTML = `<span class="dot" style="background:${t.color}"></span><span></span><span class="n">${counts[k] || 0}</span>`;
+    li.children[1].textContent = t.name;
+    li.onclick = () => {
+      filterTopic = filterTopic === k ? null : k; renderTopics(counts); applyFilter();
+      if (filterTopic !== null) controls.target.lerp(hubs[k], 1);
+    };
+    ul.appendChild(li);
+  });
+}
+
+// ---------------- adding items ----------------
+function addItems(newOnes) {
+  if (!newOnes.length) { status('Nothing found to add.'); return; }
+  const seen = new Set(items.map(i => i.text));
+  const fresh = newOnes.filter(i => !seen.has(i.text) && seen.add(i.text));
+  items.push(...fresh); save(); retrain();
+}
+
+$('add').onclick = () => {
+  const v = $('paste').value; if (!v.trim()) return;
+  addItems(window.Parse.parseText(v, 'pasted', $('ptype').value || undefined));
+  $('paste').value = '';
+};
+
+async function readFiles(files) {
+  const all = [];
+  for (const f of files) {
+    try { all.push(...window.Parse.parseFile(f.name, await f.text())); }
+    catch (e) { status(`Could not read ${f.name}: ${e.message}`); }
+  }
+  addItems(all);
+}
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => { readFiles([...e.target.files]); e.target.value = ''; };
+for (const t of [drop, document.body]) {
+  t.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  t.addEventListener('dragleave', () => drop.classList.remove('over'));
+  t.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); readFiles([...e.dataTransfer.files]); });
+}
+
+$('search').oninput = e => { query = e.target.value; applyFilter(); };
+$('toggle').onclick = () => { $('side').classList.toggle('collapsed'); $('toggle').textContent = $('side').classList.contains('collapsed') ? '▴' : '▾'; };
+
+$('export').onclick = () => {
+  const data = { exported: new Date().toISOString(), topics: TOPICS.map(t => ({ id: t.id, name: t.name, position: t.pos })),
+    items: items.map(({ c, ...it }) => ({ ...it, placedAs: c?.label, topic: TOPICS[it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : c?.top]?.id,
+      spectrum: c && +c.spectrum.toFixed(3) })) };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  a.download = 'thought-spectrum.json'; a.click();
+};
+$('clear').onclick = () => { if (confirm('Remove all notes and quotes?')) { items = []; save(); closeDetail(); retrain(); } };
+$('demo').onclick = () => addItems(window.Parse.parseText(SAMPLE, 'sample'));
+
+// ---------------- picking ----------------
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let downAt = null;
+function pick(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  return ray.intersectObjects(meshes, false)[0]?.object;
+}
+renderer.domElement.addEventListener('pointermove', e => {
+  const m = pick(e), tip = $('tip');
+  if (!m) { tip.style.display = 'none'; renderer.domElement.style.cursor = ''; return; }
+  const it = m.userData.item;
+  renderer.domElement.style.cursor = 'pointer';
+  tip.textContent = (it.text.length > 160 ? it.text.slice(0, 160) + '…' : it.text) + (it.author ? `  — ${it.author}` : '');
+  tip.className = it.type === 'quote' ? 'quote' : '';
+  tip.style.display = 'block';
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - 300) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+});
+renderer.domElement.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+  const m = pick(e); if (m) openDetail(m.userData.item); else closeDetail();
+});
+
+function openDetail(it) {
+  selected = it; const c = it.c;
+  $('detail').style.display = 'block';
+  $('dtype').textContent = `${it.type.toUpperCase()} · from ${it.source}`;
+  $('dtext').textContent = it.type === 'quote' ? `“${it.text}”` : it.text;
+  $('dtext').className = it.type === 'quote' ? 'quote' : '';
+  $('dauthor').textContent = it.author ? `— ${it.author}` : '';
+  $('dlabel').textContent = it.userTopic ? `${TOPICS.find(t => t.id === it.userTopic).name} (taught by you)` : c.label;
+  $('dspec').style.left = `calc(${(c.spectrum * 100).toFixed(1)}% - 1px)`;
+  const probs = $('dprobs'); probs.innerHTML = '';
+  c.p.map((p, k) => ({ p, k })).sort((a, b) => b.p - a.p).slice(0, 3).forEach(({ p, k }) => {
+    const row = document.createElement('div');
+    row.innerHTML = `<div class="ends"><span></span><span>${Math.round(p * 100)}%</span></div><div class="bar"><div style="width:${p * 100}%;background:${TOPICS[k].color}"></div></div>`;
+    row.querySelector('span').textContent = TOPICS[k].name;
+    probs.appendChild(row);
+  });
+  const sel = $('reassign');
+  sel.innerHTML = `<option value="">Let the net decide</option>` + TOPICS.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  sel.value = it.userTopic || '';
+  applyFilter();
+}
+function closeDetail() { selected = null; $('detail').style.display = 'none'; applyFilter(); }
+$('close').onclick = closeDetail;
+$('reassign').onchange = e => {
+  if (e.target.value) selected.userTopic = e.target.value; else delete selected.userTopic;
+  save(); const it = selected; retrain(); setTimeout(() => openDetail(it), 60);
+};
+$('remove').onclick = () => { items = items.filter(i => i !== selected); save(); closeDetail(); retrain(); };
+
+// ---------------- loop ----------------
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); labels.render(scene, camera); });
+
+const SAMPLE = `"He who has a why to live can bear almost any how." — Friedrich Nietzsche
+
+"The unexamined life is not worth living." — Socrates
+
+"The obstacle is the way." — Marcus Aurelius
+
+Is the self just a story the brain keeps telling itself?
+
+"Art is the lie that enables us to realize the truth." — Pablo Picasso
+
+Rewrote chapter two of the novel; the dialogue finally feels alive.
+
+"Power tends to corrupt, and absolute power corrupts absolutely." — Lord Acton
+
+Ancient Rome's senate shows how institutions decay when power concentrates.
+
+Use spaced repetition flashcards for the Spanish vocabulary.
+
+Call mom this weekend and apologize for the argument.
+
+Run 3 miles on Tuesday and Thursday, in bed by 10:30.
+
+Stoic discipline is what actually keeps my morning workout habit alive.
+
+Weekly review: clear the inbox, pick three priorities, block deep work time.
+
+Spent $420 on groceries this month, need to cut the budget by 15%.
+
+"Compound interest is the eighth wonder of the world." — Albert Einstein
+
+Comparing three vendors: score each on price, latency and support, weight price at 50%.
+
+Before deciding, list the tradeoffs and estimate the probability each option fails.`;
+
+if (!items.length) status('Upload or paste notes to begin — or load the sample.');
+retrain();
+</script>
+</body>
+</html>
