@@ -11,7 +11,7 @@ Open `index.html` in a browser. No build step and no server needed (it needs int
 load three.js from a CDN). Then:
 
 - **Upload**: drop `.txt`, `.md`, `.csv` or `.json` files onto the page, or click the upload box.
-- **Paste**: put one note or quote per paragraph. Quotes are detected from quotation marks,
+- **Paste**: put one note or quote per line or paragraph. Quotes are detected from quotation marks,
   `>` blockquotes, or an attribution line like `— Marcus Aurelius`. You can also force a type.
 - **Explore**: drag to orbit, scroll to zoom. Hover a point to read it and click it for details.
   Click a topic in the list to highlight it, or use the search box.
@@ -29,7 +29,8 @@ each item to its topic hub.
 
 | Format | How it's read |
 |---|---|
-| `.txt` / `.md` | Paragraphs separated by blank lines. A block of bullets becomes one item per bullet. `#` headings are ignored. |
+| `.docx` (Word) | Each paragraph is an entry. An author line under a quote (`— Seneca`) attaches to it, and headings are skipped. Older `.doc` files need saving as `.docx` first. |
+| `.txt` / `.md` | With no blank lines, one entry per line. With blank lines, each block is one entry, unless every line in it is a complete sentence or list item, in which case each line is. Author lines attach to the line above, and `#` headings are skipped. |
 | `.csv` | Uses a `text` (or `quote`/`note`/`content`) column, plus `author` and `type` columns if present. Otherwise it uses the first column. |
 | `.json` | An array of strings, or objects with `text`/`quote`, `author`, `type`. |
 

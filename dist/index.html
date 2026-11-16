@@ -71,15 +71,17 @@
   <div class="sub">A small neural net that maps your notes &amp; quotes from philosophy to practical analysis.</div>
 
   <h2>Upload</h2>
-  <div id="drop" tabindex="0" role="button">Drop .txt .md .csv .json files<br>or click to choose</div>
-  <input id="file" type="file" multiple accept=".txt,.md,.markdown,.csv,.json,text/plain" hidden>
+  <div id="drop" tabindex="0" role="button">Drop Word (.docx), .txt, .md, .csv or .json files<br>or click to choose</div>
+  <input id="file" type="file" multiple accept=".docx,.txt,.md,.markdown,.csv,.json,text/plain" hidden>
+  <div class="row">
+    <label for="ptype" class="sub" style="flex:none">Items are</label>
+    <select id="ptype"><option value="">auto-detected (note or quote)</option><option value="note">all notes</option><option value="quote">all quotes</option></select>
+  </div>
+  <div id="added" class="sub" style="margin-top:6px" role="status"></div>
 
   <h2>Or paste</h2>
   <textarea id="paste" placeholder="One note or quote per paragraph.&#10;&#10;&quot;The obstacle is the way.&quot; — Marcus Aurelius"></textarea>
-  <div class="row">
-    <select id="ptype"><option value="">Auto-detect type</option><option value="note">All notes</option><option value="quote">All quotes</option></select>
-    <button id="add">Add</button>
-  </div>
+  <div class="row"><button id="add">Add</button></div>
 
   <h2>Topics</h2>
   <input id="search" type="search" placeholder="Search text…">
@@ -112,6 +114,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="nn.js"></script>
 <script src="parse.js"></script>
 <script type="importmap">
@@ -177,8 +180,11 @@ const store = {
   saveLocal() { if (!this.col) try { localStorage.setItem(STORE, JSON.stringify(items.map(plain))); } catch {} },
   async put(list) {
     if (!this.col) return this.saveLocal();
-    for (let i = 0; i < list.length; i += 10)
+    for (let i = 0; i < list.length; i += 10) {
+      if (list.length > 20) note(`Saving ${i} of ${list.length}…`);
       await Promise.all(list.slice(i, i + 10).map(it => this.col.doc(it.id).set(plain(it))));
+    }
+    if (list.length > 20) note(`Saved to your claude.ai account (${items.length} items). Only you can see them.`);
   },
   async remove(list) {
     if (!this.col) return this.saveLocal();
@@ -187,28 +193,37 @@ const store = {
 };
 function plain({ c, sample, ...rest }) { return JSON.parse(JSON.stringify(rest)); }
 function loadLocal() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch { return []; } }
-const saveFailed = e => status(`Couldn't save: ${e?.message || e?.code || 'unknown error'}. Your change shows here but may not be kept.`);
+// Save problems go in their own line so the training status can't overwrite them.
+const note = (msg, warn = false) => { const el = $('storenote'); el.textContent = msg; el.style.color = warn ? 'var(--warn)' : ''; };
+const saveFailed = e => note(`Couldn't save your last change (${e?.code || e?.message || 'unknown error'}). It shows here but will be gone after a reload.`, true);
 
 async function connect() {
   const claude = window.claude;
   if (!claude?.use) { items = loadLocal(); retrain(); return; }
   status('Opening your saved notes…');
-  const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
-  const uid = user && await user.id();
-  if (!db || !uid) {
+  let col = null;
+  try {
+    const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+    const uid = user && await user.id();
+    // Your private folder: data/users/<you>. Each note or quote is one document in it.
+    if (db && uid) col = db.collection('data/users/' + uid);
+  } catch (e) { console.error(e); }
+  if (!col) {
     items = loadLocal(); retrain();
-    $('storenote').textContent = 'Notes are saved in this browser only. Sign in to claude.ai to keep them across devices.';
+    note('Notes are saved in this browser only. Sign in to claude.ai to keep them across devices.', true);
     return;
   }
-  store.col = db.collection('data/users/' + uid + '/items');
+  store.col = col;
   const slow = setTimeout(() => status('Still connecting to your saved notes…'), 10000);
-  store.col.onSnapshot(snap => {
+  col.onSnapshot(snap => {
     clearTimeout(slow);
     items = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    if (!snap.metadata.fromCache) note(`Saved to your claude.ai account (${items.length} items). Only you can see them.`);
     retrain();
   }, err => {
     clearTimeout(slow);
-    status(`Couldn't load your saved notes (${err.code}). Reload the page to try again.`);
+    note(`Couldn't load your saved notes (${err.code}). Reload the page to try again.`, true);
+    retrain();
   });
 }
 
@@ -368,11 +383,14 @@ function renderTopics(counts) {
 }
 
 // ---------------- adding items ----------------
-function addItems(newOnes) {
-  if (!newOnes.length) { status('Nothing found to add.'); return; }
+function addItems(newOnes, from = 'pasted text') {
+  const added = $('added');
+  if (!newOnes.length) { added.textContent = `Found nothing to add in ${from}.`; return; }
   const seen = new Set(items.map(i => i.text));
   const fresh = newOnes.filter(i => !seen.has(i.text) && seen.add(i.text));
-  if (!fresh.length) { status('Those are all on the map already.'); return; }
+  if (!fresh.length) { added.textContent = `Everything in ${from} is already on the map.`; return; }
+  const q = fresh.filter(i => i.type === 'quote').length, dup = newOnes.length - fresh.length;
+  added.textContent = `Added ${fresh.length} from ${from}: ${q} quotes, ${fresh.length - q} notes` + (dup ? ` (${dup} duplicates skipped)` : '') + '.';
   items.push(...fresh); retrain();
   store.put(fresh).catch(saveFailed);
 }
@@ -384,12 +402,26 @@ $('add').onclick = () => {
 };
 
 async function readFiles(files) {
-  const all = [];
+  const all = [], problems = [];
+  const forced = $('ptype').value || undefined;
   for (const f of files) {
-    try { all.push(...window.Parse.parseFile(f.name, await f.text())); }
-    catch (e) { status(`Could not read ${f.name}: ${e.message}`); }
+    const ext = f.name.toLowerCase().split('.').pop();
+    try {
+      if (ext === 'doc') { problems.push(`${f.name} is an older Word format. In Word, use File → Save As → .docx, then upload that.`); continue; }
+      if (ext === 'pdf' || ext === 'pages') { problems.push(`${f.name}: export it as .docx or .txt first.`); continue; }
+      let content;
+      if (ext === 'docx') {
+        if (!window.JSZip) { problems.push(`Couldn't open ${f.name}: the Word reader didn't load. Check your connection and reload.`); continue; }
+        const zip = await window.JSZip.loadAsync(await f.arrayBuffer());
+        const doc = zip.file('word/document.xml');
+        if (!doc) { problems.push(`${f.name} doesn't look like a Word document.`); continue; }
+        content = await doc.async('string');
+      } else content = await f.text();
+      all.push(...window.Parse.parseFile(f.name, content, forced));
+    } catch (e) { problems.push(`Couldn't read ${f.name} (${e.message}).`); }
   }
-  addItems(all);
+  addItems(all, files.length === 1 ? files[0].name : `${files.length} files`);
+  if (problems.length) $('added').textContent += ' ' + problems.join(' ');
 }
 const drop = $('drop');
 drop.onclick = () => $('file').click();
