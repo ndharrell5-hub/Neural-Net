@@ -33,6 +33,13 @@ each item to its topic hub.
 | `.csv` | Uses a `text` (or `quote`/`note`/`content`) column, plus `author` and `type` columns if present. Otherwise it uses the first column. |
 | `.json` | An array of strings, or objects with `text`/`quote`, `author`, `type`. |
 
+### Publishing as a claude.ai page
+
+`python3 build-artifact.py` writes `dist/index.html`, which is the same page without the outer
+`<html>` wrapper that claude.ai adds itself. It is published with `nn.js` and `parse.js` beside it.
+On claude.ai the page keeps each person's notes in their own private store, so they sync across
+devices. Export there asks you to confirm the save. Opened from disk, notes stay in that browser.
+
 ## How the network works (`nn.js`)
 
 1. **Features.** Text is tokenised, lightly stemmed and hashed into a 4096-wide sparse

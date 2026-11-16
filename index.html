@@ -7,7 +7,8 @@
 <style>
   :root {
     --bg: #0b0d12; --panel: rgba(18, 21, 28, 0.92); --line: #262b36;
-    --text: #d8dbe2; --muted: #7d8494; --accent: #9fb4ff;
+    --text: #d8dbe2; --muted: #7d8494; --accent: #9fb4ff; --warn: #ffb48c;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -15,8 +16,15 @@
   #scene { position: fixed; inset: 0; }
   .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     padding: 12px; backdrop-filter: blur(4px); }
-  #side { top: 12px; left: 12px; width: 300px; max-height: calc(100% - 24px); overflow-y: auto; }
-  #detail { top: 12px; right: 12px; width: 340px; max-height: calc(100% - 24px); overflow-y: auto; display: none; }
+  /* offsets clear phone notches and system bars */
+  #side { top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: 300px;
+    max-height: calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
+  #detail { top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); width: 340px;
+    max-height: calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
+  #detail[hidden] { display: none; }
+  #samplenote { color: var(--warn); font-size: 11px; margin-top: 8px; }
+  button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible, #drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.danger { border-color: var(--warn); color: var(--warn); }
   h1 { font-size: 14px; margin: 0 0 2px; letter-spacing: .04em; }
   h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
   .sub { color: var(--muted); font-size: 11px; }
@@ -51,10 +59,12 @@
   #close { float: right; }
   #toggle { display: none; }
   @media (max-width: 720px) {
-    #side { left: 8px; right: 8px; width: auto; top: auto; bottom: 8px; max-height: 50%; }
+    #side { left: calc(8px + env(safe-area-inset-left, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); width: auto; top: auto;
+      bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-height: 50%; }
     #side.collapsed > :not(#toggle):not(h1) { display: none; }
     #toggle { display: inline-block; float: right; }
-    #detail { left: 8px; right: 8px; width: auto; top: 8px; max-height: 45%; }
+    #detail { left: calc(8px + env(safe-area-inset-left, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); width: auto;
+      top: calc(8px + env(safe-area-inset-top, 0px)); max-height: 45%; }
   }
 </style>
 </head>
@@ -68,7 +78,7 @@
   <div class="sub">A small neural net that maps your notes &amp; quotes from philosophy to practical analysis.</div>
 
   <h2>Upload</h2>
-  <div id="drop">Drop .txt .md .csv .json files<br>or click to choose</div>
+  <div id="drop" tabindex="0" role="button">Drop .txt .md .csv .json files<br>or click to choose</div>
   <input id="file" type="file" multiple accept=".txt,.md,.markdown,.csv,.json,text/plain" hidden>
 
   <h2>Or paste</h2>
@@ -84,13 +94,14 @@
 
   <div class="row" style="margin-top:12px">
     <button id="export">Export</button>
-    <button id="demo">Load sample</button>
     <button id="clear">Clear all</button>
   </div>
-  <div id="status"></div>
+  <div id="samplenote" hidden>These are sample notes. Add your own and they replace the samples.</div>
+  <div id="status" role="status"></div>
+  <div id="storenote" class="sub" style="margin-top:6px"></div>
 </div>
 
-<div id="detail" class="panel">
+<div id="detail" class="panel" hidden>
   <button id="close">×</button>
   <div id="dtype" class="sub"></div>
   <p id="dtext" style="margin:8px 0 4px"></p>
@@ -101,9 +112,11 @@
   <div class="ends"><span>philosophy</span><span>practical analysis</span></div>
   <h2>Net's top guesses</h2>
   <div id="dprobs"></div>
-  <h2>Teach the net</h2>
-  <div class="row"><select id="reassign"></select></div>
-  <div class="row"><button id="remove">Delete item</button></div>
+  <div id="teach">
+    <h2>Teach the net</h2>
+    <div class="row"><select id="reassign" aria-label="Topic for this item"></select></div>
+    <div class="row"><button id="remove">Delete item</button></div>
+  </div>
 </div>
 
 <script src="nn.js"></script>
@@ -123,11 +136,88 @@ const { TOPICS, buildNet } = window.NN;
 const $ = id => document.getElementById(id);
 const STORE = 'thought-spectrum-items-v1';
 
-// ---------------- state ----------------
-let items = [];
-try { items = JSON.parse(localStorage.getItem(STORE) || '[]'); } catch { items = []; }
-const save = () => { try { localStorage.setItem(STORE, JSON.stringify(items)); } catch {} };
+const SAMPLE = `"He who has a why to live can bear almost any how." — Friedrich Nietzsche
+
+"The unexamined life is not worth living." — Socrates
+
+"The obstacle is the way." — Marcus Aurelius
+
+Is the self just a story the brain keeps telling itself?
+
+"Art is the lie that enables us to realize the truth." — Pablo Picasso
+
+Rewrote chapter two of the novel; the dialogue finally feels alive.
+
+"Power tends to corrupt, and absolute power corrupts absolutely." — Lord Acton
+
+Ancient Rome's senate shows how institutions decay when power concentrates.
+
+Use spaced repetition flashcards for the Spanish vocabulary.
+
+Call mom this weekend and apologize for the argument.
+
+Run 3 miles on Tuesday and Thursday, in bed by 10:30.
+
+Stoic discipline is what actually keeps my morning workout habit alive.
+
+Weekly review: clear the inbox, pick three priorities, block deep work time.
+
+Spent $420 on groceries this month, need to cut the budget by 15%.
+
+"Compound interest is the eighth wonder of the world." — Albert Einstein
+
+Comparing three vendors: score each on price, latency and support, weight price at 50%.
+
+Before deciding, list the tradeoffs and estimate the probability each option fails.`;
+
+// ---------------- state + storage ----------------
+// Opened from disk, notes live in this browser (localStorage). Published as a
+// claude.ai page, they live in the viewer's own private store (db capability),
+// so they follow them across devices.
+let items = [];                       // the viewer's own notes and quotes
+const sampleItems = window.Parse.parseText(SAMPLE, 'sample').map(it => ({ ...it, sample: true }));
+let shown = [];                       // what's on the map: your items, or the samples until you add some
 let net = null, filterTopic = null, query = '', selected = null;
+
+const store = {
+  col: null,                          // db collection when running on claude.ai
+  saveLocal() { if (!this.col) try { localStorage.setItem(STORE, JSON.stringify(items.map(plain))); } catch {} },
+  async put(list) {
+    if (!this.col) return this.saveLocal();
+    for (let i = 0; i < list.length; i += 10)
+      await Promise.all(list.slice(i, i + 10).map(it => this.col.doc(it.id).set(plain(it))));
+  },
+  async remove(list) {
+    if (!this.col) return this.saveLocal();
+    for (let i = 0; i < list.length; i += 10) await Promise.all(list.slice(i, i + 10).map(it => this.col.doc(it.id).delete()));
+  },
+};
+function plain({ c, sample, ...rest }) { return JSON.parse(JSON.stringify(rest)); }
+function loadLocal() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch { return []; } }
+const saveFailed = e => status(`Couldn't save: ${e?.message || e?.code || 'unknown error'}. Your change shows here but may not be kept.`);
+
+async function connect() {
+  const claude = window.claude;
+  if (!claude?.use) { items = loadLocal(); retrain(); return; }
+  status('Opening your saved notes…');
+  const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
+  const uid = user && await user.id();
+  if (!db || !uid) {
+    items = loadLocal(); retrain();
+    $('storenote').textContent = 'Notes are saved in this browser only. Sign in to claude.ai to keep them across devices.';
+    return;
+  }
+  store.col = db.collection('data/users/' + uid + '/items');
+  const slow = setTimeout(() => status('Still connecting to your saved notes…'), 10000);
+  store.col.onSnapshot(snap => {
+    clearTimeout(slow);
+    items = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    retrain();
+  }, err => {
+    clearTimeout(slow);
+    status(`Couldn't load your saved notes (${err.code}). Reload the page to try again.`);
+  });
+}
 
 // ---------------- scene ----------------
 const host = $('scene');
@@ -142,7 +232,9 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color('#0b0d12');
 scene.fog = new THREE.Fog('#0b0d12', 140, 320);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
-camera.position.set(0, 50, 165);
+// Pull back on portrait screens so the whole spectrum fits across.
+const portrait = innerWidth < innerHeight;
+camera.position.set(0, 50, 165).multiplyScalar(portrait ? Math.min(2.6, 1.15 * innerHeight / innerWidth) : 1);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.autoRotate = true; controls.autoRotateSpeed = 0.25;
@@ -198,17 +290,23 @@ addEventListener('resize', resize); resize();
 // ---------------- net + layout ----------------
 function status(msg) { $('status').textContent = msg; }
 
+// Debounced: a burst of changes (a big upload, live sync) trains once.
+let trainTimer = null;
 function retrain() {
   status('Training the network…');
-  setTimeout(() => {
+  clearTimeout(trainTimer);
+  trainTimer = setTimeout(() => {
+    shown = items.length ? items : sampleItems;
+    $('samplenote').hidden = items.length > 0;
     const t0 = performance.now();
-    net = buildNet(items);
+    net = buildNet(shown);
     const ms = Math.round(performance.now() - t0);
-    for (const it of items) it.c = net.classify(it.text);
+    for (const it of shown) it.c = net.classify(it.text);
     status(`Network: ${window.NN.DIM} inputs → ${net.H} hidden → ${TOPICS.length} topics\n` +
-      `${items.length} items · ${items.filter(i => i.userTopic).length} taught · trained in ${ms} ms · loss ${net.loss.toFixed(3)}`);
+      `${shown.length} ${items.length ? '' : 'sample '}items · ${shown.filter(i => i.userTopic).length} taught · trained in ${ms} ms · loss ${net.loss.toFixed(3)}`);
     layout();
-  }, 30);
+    if (selected) { const again = shown.find(i => i.id === selected.id); again ? openDetail(again) : closeDetail(); }
+  }, 120);
 }
 
 // Two fixed projections of the hidden layer give each item a personal offset,
@@ -220,7 +318,7 @@ function jitter(str) { let h = 9; for (const ch of String(str)) h = Math.imul(h 
 function layout() {
   itemGroup.clear(); meshes = [];
   const counts = new Array(TOPICS.length).fill(0);
-  for (const it of items) {
+  for (const it of shown) {
     const c = it.c; if (!c) continue;
     const k = it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : c.top;
     counts[k]++;
@@ -281,7 +379,9 @@ function addItems(newOnes) {
   if (!newOnes.length) { status('Nothing found to add.'); return; }
   const seen = new Set(items.map(i => i.text));
   const fresh = newOnes.filter(i => !seen.has(i.text) && seen.add(i.text));
-  items.push(...fresh); save(); retrain();
+  if (!fresh.length) { status('Those are all on the map already.'); return; }
+  items.push(...fresh); retrain();
+  store.put(fresh).catch(saveFailed);
 }
 
 $('add').onclick = () => {
@@ -300,6 +400,7 @@ async function readFiles(files) {
 }
 const drop = $('drop');
 drop.onclick = () => $('file').click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } };
 $('file').onchange = e => { readFiles([...e.target.files]); e.target.value = ''; };
 for (const t of [drop, document.body]) {
   t.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
@@ -308,18 +409,40 @@ for (const t of [drop, document.body]) {
 }
 
 $('search').oninput = e => { query = e.target.value; applyFilter(); };
+if (innerWidth <= 720) { $('side').classList.add('collapsed'); $('toggle').textContent = '▴'; }
 $('toggle').onclick = () => { $('side').classList.toggle('collapsed'); $('toggle').textContent = $('side').classList.contains('collapsed') ? '▴' : '▾'; };
 
-$('export').onclick = () => {
+$('export').onclick = async () => {
   const data = { exported: new Date().toISOString(), topics: TOPICS.map(t => ({ id: t.id, name: t.name, position: t.pos })),
-    items: items.map(({ c, ...it }) => ({ ...it, placedAs: c?.label, topic: TOPICS[it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : c?.top]?.id,
+    items: items.map(({ c, sample, ...it }) => ({ ...it, placedAs: c?.label, topic: TOPICS[it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : c?.top]?.id,
       spectrum: c && +c.spectrum.toFixed(3) })) };
+  const json = JSON.stringify(data, null, 2);
+  if (window.claude?.use) {
+    // claude.ai pages can't start downloads themselves; the viewer confirms a save instead
+    const downloads = await window.claude.use('downloads');
+    if (!downloads) { status('Saving files isn\'t available in this view.'); return; }
+    try { await downloads.save({ filename: 'thought-spectrum.json', data: json }); status('Export saved.'); }
+    catch (e) { if (e?.code !== 'declined') status(`Export didn't save (${e?.code || 'error'}).`); }
+    return;
+  }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
   a.download = 'thought-spectrum.json'; a.click();
 };
-$('clear').onclick = () => { if (confirm('Remove all notes and quotes?')) { items = []; save(); closeDetail(); retrain(); } };
-$('demo').onclick = () => addItems(window.Parse.parseText(SAMPLE, 'sample'));
+// Two-step clear: the first press arms the button, the second within 4 s deletes.
+let clearArmed = null;
+$('clear').onclick = () => {
+  const btn = $('clear');
+  if (!items.length) { status('There are no notes of yours to clear.'); return; }
+  if (!clearArmed) {
+    btn.textContent = `Delete ${items.length}?`; btn.classList.add('danger');
+    clearArmed = setTimeout(() => { clearArmed = null; btn.textContent = 'Clear all'; btn.classList.remove('danger'); }, 4000);
+    return;
+  }
+  clearTimeout(clearArmed); clearArmed = null; btn.textContent = 'Clear all'; btn.classList.remove('danger');
+  const gone = items; items = []; closeDetail(); retrain();
+  store.remove(gone).catch(saveFailed);
+};
 
 // ---------------- picking ----------------
 const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
@@ -348,7 +471,8 @@ renderer.domElement.addEventListener('pointerup', e => {
 
 function openDetail(it) {
   selected = it; const c = it.c;
-  $('detail').style.display = 'block';
+  $('detail').hidden = false;
+  $('teach').hidden = !!it.sample;
   $('dtype').textContent = `${it.type.toUpperCase()} · from ${it.source}`;
   $('dtext').textContent = it.type === 'quote' ? `“${it.text}”` : it.text;
   $('dtext').className = it.type === 'quote' ? 'quote' : '';
@@ -367,53 +491,24 @@ function openDetail(it) {
   sel.value = it.userTopic || '';
   applyFilter();
 }
-function closeDetail() { selected = null; $('detail').style.display = 'none'; applyFilter(); }
+function closeDetail() { selected = null; $('detail').hidden = true; applyFilter(); }
 $('close').onclick = closeDetail;
 $('reassign').onchange = e => {
   if (e.target.value) selected.userTopic = e.target.value; else delete selected.userTopic;
-  save(); const it = selected; retrain(); setTimeout(() => openDetail(it), 60);
+  const it = selected; retrain();
+  store.put([it]).catch(saveFailed);
 };
-$('remove').onclick = () => { items = items.filter(i => i !== selected); save(); closeDetail(); retrain(); };
+$('remove').onclick = () => {
+  const it = selected; items = items.filter(i => i !== it); closeDetail(); retrain();
+  store.remove([it]).catch(saveFailed);
+};
 
 // ---------------- loop ----------------
 renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); labels.render(scene, camera); });
 
-const SAMPLE = `"He who has a why to live can bear almost any how." — Friedrich Nietzsche
 
-"The unexamined life is not worth living." — Socrates
 
-"The obstacle is the way." — Marcus Aurelius
-
-Is the self just a story the brain keeps telling itself?
-
-"Art is the lie that enables us to realize the truth." — Pablo Picasso
-
-Rewrote chapter two of the novel; the dialogue finally feels alive.
-
-"Power tends to corrupt, and absolute power corrupts absolutely." — Lord Acton
-
-Ancient Rome's senate shows how institutions decay when power concentrates.
-
-Use spaced repetition flashcards for the Spanish vocabulary.
-
-Call mom this weekend and apologize for the argument.
-
-Run 3 miles on Tuesday and Thursday, in bed by 10:30.
-
-Stoic discipline is what actually keeps my morning workout habit alive.
-
-Weekly review: clear the inbox, pick three priorities, block deep work time.
-
-Spent $420 on groceries this month, need to cut the budget by 15%.
-
-"Compound interest is the eighth wonder of the world." — Albert Einstein
-
-Comparing three vendors: score each on price, latency and support, weight price at 50%.
-
-Before deciding, list the tradeoffs and estimate the probability each option fails.`;
-
-if (!items.length) status('Upload or paste notes to begin — or load the sample.');
-retrain();
+connect();
 </script>
 </body>
 </html>
