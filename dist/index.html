@@ -1,103 +1,143 @@
 <title>Thought Spectrum</title>
 <style>
+  /* Layout: full-screen star map; control panel docked left (bottom sheet on phones);
+     detail card docked right; breadcrumb floats top centre. A single deliberate night palette. */
   :root {
-    --bg: #0b0d12; --panel: rgba(18, 21, 28, 0.92); --line: #262b36;
-    --text: #d8dbe2; --muted: #7d8494; --accent: #9fb4ff; --warn: #ffb48c;
+    --void: #060914; --panel: rgba(13, 17, 31, 0.9); --line: #232a44; --raised: #171d33;
+    --text: #dfe3f0; --muted: #8189a6; --accent: #a9b8ff; --warn: #ffb48c; --star: #f4f1e6;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  html, body { margin: 0; height: 100%; background: var(--void); color: var(--text);
     font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; }
   #scene { position: fixed; inset: 0; }
   .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     padding: 12px; backdrop-filter: blur(4px); }
-  /* offsets clear phone notches and system bars */
   #side { top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px)); width: 300px;
     max-height: calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
   #detail { top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); width: 340px;
     max-height: calc(100% - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); overflow-y: auto; }
-  #detail[hidden] { display: none; }
-  #samplenote { color: var(--warn); font-size: 11px; margin-top: 8px; }
-  button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible, #drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  button.danger { border-color: var(--warn); color: var(--warn); }
-  h1 { font-size: 14px; margin: 0 0 2px; letter-spacing: .04em; }
-  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+  #crumbs { top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(330px + (100% - 330px) / 2); transform: translateX(-50%); padding: 6px 10px;
+    display: flex; gap: 8px; align-items: center; white-space: nowrap; max-width: calc(100% - 720px); min-width: 0; overflow: hidden; }
+  #crumbs button { padding: 2px 8px; }
+  #trail { display: flex; gap: 8px; min-width: 0; overflow: hidden; }
+  #crumbs .sep { color: var(--muted); }
+  #crumbs .here { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+  #crumbs a { color: var(--accent); cursor: pointer; text-decoration: none; }
+  [hidden] { display: none !important; }
+  button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible, #drop:focus-visible, li:focus-visible, #crumbs a:focus-visible
+    { outline: 2px solid var(--accent); outline-offset: 1px; }
+  h1 { font-size: 14px; margin: 0 0 2px; letter-spacing: .08em; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
   .sub { color: var(--muted); font-size: 11px; }
-  textarea, input[type=search], select { width: 100%; background: #0f1218; color: var(--text); border: 1px solid var(--line);
+  .warn { color: var(--warn); }
+  textarea, input[type=search], input[type=text], select { width: 100%; background: #0b0f1d; color: var(--text); border: 1px solid var(--line);
     border-radius: 5px; padding: 6px; font: inherit; }
-  textarea { height: 84px; resize: vertical; }
-  button, .btn { background: #1b2030; color: var(--text); border: 1px solid #333a4a; border-radius: 5px; padding: 5px 10px;
-    font: inherit; cursor: pointer; display: inline-block; }
-  button:hover, .btn:hover { border-color: var(--accent); }
-  .row { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
-  .row > select { flex: 1; }
-  #drop { border: 1px dashed #3a4152; border-radius: 6px; padding: 10px; text-align: center; color: var(--muted); cursor: pointer; }
+  textarea { height: 76px; resize: vertical; }
+  button { background: var(--raised); color: var(--text); border: 1px solid #343c5c; border-radius: 5px; padding: 5px 10px;
+    font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.danger { border-color: var(--warn); color: var(--warn); }
+  .row { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
+  .row > select, .row > input { flex: 1; min-width: 0; }
+  #drop { border: 1px dashed #3a4366; border-radius: 6px; padding: 9px; text-align: center; color: var(--muted); cursor: pointer; }
   #drop.over { border-color: var(--accent); color: var(--text); }
-  #topics { list-style: none; padding: 0; margin: 0; }
-  #topics li { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
-  #topics li:hover, #topics li.on { background: #1b2030; }
-  #topics .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-  #topics .n { margin-left: auto; color: var(--muted); }
+  ul.list { list-style: none; padding: 0; margin: 0; max-height: 260px; overflow-y: auto; }
+  ul.list li { display: flex; align-items: center; gap: 8px; padding: 4px 5px; border-radius: 4px; cursor: pointer; min-width: 0; }
+  ul.list li:hover { background: var(--raised); }
+  ul.list .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  ul.list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  ul.list .n { margin-left: auto; color: var(--muted); flex: none; }
+  ul.list .where { display: block; color: var(--muted); font-size: 10px; }
+  #results li { display: block; }
+  .badge { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; flex: none; }
   #status { color: var(--muted); font-size: 11px; margin-top: 10px; white-space: pre-line; }
   .quote { font-style: italic; }
-  .bar { height: 6px; background: #1b2030; border-radius: 3px; overflow: hidden; margin: 2px 0 6px; }
+  .bar { height: 6px; background: var(--raised); border-radius: 3px; overflow: hidden; margin: 2px 0 6px; }
   .bar > div { height: 100%; }
   .spec { position: relative; height: 8px; border-radius: 4px; margin: 6px 0 2px;
     background: linear-gradient(90deg, #b48cff, #8cdcff, #b8ff8c, #ffd88c, #ff8c8c); }
   .spec > i { position: absolute; top: -3px; width: 3px; height: 14px; background: #fff; border-radius: 2px; }
-  .ends { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
-  .label3d { font-size: 11px; color: var(--text); background: rgba(11,13,18,.7); padding: 1px 6px; border-radius: 4px;
-    white-space: nowrap; pointer-events: none; }
-  .label3d.axis { color: var(--muted); letter-spacing: .12em; background: none; font-size: 12px; }
-  #tip { position: fixed; pointer-events: none; max-width: 280px; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 6px; padding: 6px 8px; display: none; font-size: 12px; }
+  .ends { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--muted); }
+  .label3d { font-size: 11px; color: var(--text); background: rgba(6, 9, 20, .72); padding: 1px 7px; border-radius: 4px;
+    white-space: nowrap; pointer-events: none; letter-spacing: .03em; }
+  .label3d.galaxy { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; border: 1px solid #3a4366; }
+  .label3d.axis { color: var(--muted); letter-spacing: .14em; background: none; font-size: 11px; }
+  #tip { position: fixed; pointer-events: none; max-width: 300px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font-size: 12px; z-index: 5; }
   #close { float: right; }
   #toggle { display: none; }
+  #empty { position: fixed; left: calc(330px + (100% - 330px) / 2); top: 50%; transform: translate(-50%, -50%); color: var(--muted);
+    text-align: center; pointer-events: none; max-width: 300px; }
+  @media (max-width: 1100px) { #crumbs { max-width: calc(100% - 360px); } }
   @media (max-width: 720px) {
     #side { left: calc(8px + env(safe-area-inset-left, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); width: auto; top: auto;
       bottom: calc(8px + env(safe-area-inset-bottom, 0px)); max-height: 50%; }
-    #side.collapsed > :not(#toggle):not(h1) { display: none; }
+    #side.collapsed > :not(#toggle):not(h1) { display: none !important; }
     #toggle { display: inline-block; float: right; }
     #detail { left: calc(8px + env(safe-area-inset-left, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); width: auto;
-      top: calc(8px + env(safe-area-inset-top, 0px)); max-height: 45%; }
+      top: calc(52px + env(safe-area-inset-top, 0px)); max-height: 42%; }
+    #crumbs { left: calc(8px + env(safe-area-inset-left, 0px)); right: calc(8px + env(safe-area-inset-right, 0px));
+      transform: none; max-width: none; top: calc(8px + env(safe-area-inset-top, 0px)); }
+    #empty { left: 50%; }
   }
 </style>
 <div id="scene"></div>
-<div id="tip"></div>
+<div id="tip" hidden></div>
+<div id="empty" hidden></div>
+
+<nav id="crumbs" class="panel" aria-label="Where you are">
+  <button id="back" title="Back (Esc)" aria-label="Back">←</button>
+  <span id="trail"></span>
+</nav>
 
 <div id="side" class="panel">
-  <button id="toggle">▾</button>
+  <button id="toggle" aria-label="Show or hide the panel">▾</button>
   <h1>THOUGHT SPECTRUM</h1>
-  <div class="sub">A small neural net that maps your notes &amp; quotes from philosophy to practical analysis.</div>
+  <div class="sub">Galaxies hold your collections. Suns are topics. Planets are your notes and quotes.</div>
 
-  <h2>Upload</h2>
+  <h2 id="listTitle">Galaxies</h2>
+  <ul id="list" class="list"></ul>
+  <div id="levelActions" class="row"></div>
+  <div id="levelForm" hidden>
+    <div class="row"><input id="formName" type="text" placeholder="Name"></div>
+    <div class="row" id="formModeRow"><select id="formMode" aria-label="What the suns are">
+      <option value="auto">Suns are topics the net sorts into</option>
+      <option value="manual">Suns are ones I name</option>
+    </select></div>
+    <div class="row"><button id="formOk">Create</button><button id="formCancel">Cancel</button></div>
+  </div>
+  <div id="levelMsg" class="sub warn" style="margin-top:6px"></div>
+
+  <h2>Add notes &amp; quotes</h2>
   <div id="drop" tabindex="0" role="button">Drop .txt .md .csv .json files<br>or click to choose</div>
   <input id="file" type="file" multiple accept=".txt,.md,.markdown,.csv,.json,text/plain" hidden>
-
-  <h2>Or paste</h2>
-  <textarea id="paste" placeholder="One note or quote per paragraph.&#10;&#10;&quot;The obstacle is the way.&quot; — Marcus Aurelius"></textarea>
+  <textarea id="paste" style="margin-top:6px" placeholder="One note or quote per paragraph.&#10;&#10;&quot;The obstacle is the way.&quot; — Marcus Aurelius"></textarea>
+  <div class="row"><label class="sub" for="addGalaxy" style="flex:none">Into</label><select id="addGalaxy"></select></div>
+  <div class="row" id="addSunRow"><label class="sub" for="addSun" style="flex:none">Sun</label><select id="addSun"></select></div>
   <div class="row">
-    <select id="ptype"><option value="">Auto-detect type</option><option value="note">All notes</option><option value="quote">All quotes</option></select>
+    <select id="ptype" aria-label="Item type"><option value="">Auto-detect type</option><option value="note">All notes</option><option value="quote">All quotes</option></select>
     <button id="add">Add</button>
   </div>
 
-  <h2>Topics</h2>
-  <input id="search" type="search" placeholder="Search text…">
-  <ul id="topics" style="margin-top:6px"></ul>
+  <h2>Search</h2>
+  <input id="search" type="search" placeholder="Words, authors, books…">
+  <ul id="results" class="list" style="margin-top:4px"></ul>
 
   <div class="row" style="margin-top:12px">
     <button id="export">Export</button>
     <button id="clear">Clear all</button>
   </div>
-  <div id="samplenote" hidden>These are sample notes. Add your own and they replace the samples.</div>
+  <div id="samplenote" class="sub warn" style="margin-top:8px" hidden>These are sample quotes. Add your own and they replace the samples.</div>
   <div id="status" role="status"></div>
   <div id="storenote" class="sub" style="margin-top:6px"></div>
 </div>
 
 <div id="detail" class="panel" hidden>
-  <button id="close">×</button>
+  <button id="close" aria-label="Close">×</button>
   <div id="dtype" class="sub"></div>
-  <p id="dtext" style="margin:8px 0 4px"></p>
+  <p id="dtext" style="margin:8px 0 4px; white-space: pre-line"></p>
   <div id="dauthor" class="sub"></div>
   <div id="dcontext" class="sub" style="margin-top:4px"></div>
   <h2>Placed as</h2>
@@ -108,7 +148,8 @@
   <div id="dprobs"></div>
   <div id="teach">
     <h2>Teach the net</h2>
-    <div class="row"><select id="reassign" aria-label="Topic for this item"></select></div>
+    <div class="row"><label class="sub" for="dsun" style="flex:none">Sun</label><select id="dsun"></select></div>
+    <div class="row"><label class="sub" for="dgalaxy" style="flex:none">Galaxy</label><select id="dgalaxy"></select></div>
     <div class="row"><button id="remove">Delete item</button></div>
   </div>
 </div>
@@ -129,6 +170,10 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 const { TOPICS, buildNet } = window.NN;
 const $ = id => document.getElementById(id);
 const STORE = 'thought-spectrum-items-v1';
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const noHover = matchMedia('(hover: none)').matches;   // touch screens: show galaxy names without hovering
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const rid = p => p + Math.random().toString(36).slice(2, 10);
 
 const SAMPLE = `"He who has a why to live can bear almost any how." — Friedrich Nietzsche
 
@@ -136,98 +181,179 @@ const SAMPLE = `"He who has a why to live can bear almost any how." — Friedric
 
 "The obstacle is the way." — Marcus Aurelius
 
-Is the self just a story the brain keeps telling itself?
-
 "Art is the lie that enables us to realize the truth." — Pablo Picasso
-
-Rewrote chapter two of the novel; the dialogue finally feels alive.
 
 "Power tends to corrupt, and absolute power corrupts absolutely." — Lord Acton
 
-Ancient Rome's senate shows how institutions decay when power concentrates.
-
-Use spaced repetition flashcards for the Spanish vocabulary.
-
-Call mom this weekend and apologize for the argument.
-
-Run 3 miles on Tuesday and Thursday, in bed by 10:30.
-
-Stoic discipline is what actually keeps my morning workout habit alive.
-
-Weekly review: clear the inbox, pick three priorities, block deep work time.
-
-Spent $420 on groceries this month, need to cut the budget by 15%.
-
 "Compound interest is the eighth wonder of the world." — Albert Einstein
 
-Comparing three vendors: score each on price, latency and support, weight price at 50%.
+"We suffer more often in imagination than in reality." — Seneca
 
-Before deciding, list the tradeoffs and estimate the probability each option fails.`;
+"Know thyself." — Delphic maxim`;
 
-// ---------------- state + storage ----------------
-// Opened from disk, notes live in this browser (localStorage). Published as a
-// claude.ai page, they live in the viewer's own private store (db capability),
-// so they follow them across devices.
-let items = [];                       // the viewer's own notes and quotes
+// ============================================================================
+// Data. Everything lives as documents in one collection:
+//   galaxy  { kind:'galaxy', name, mode:'auto'|'manual', created }
+//   sun     { kind:'sun', galaxy, name, created }            (manual galaxies only)
+//   item    { text, author, type, source, added, galaxy?, sun?, userTopic?, context? }
+// Items saved before galaxies existed have no `galaxy`; they belong to Quotes.
+// ============================================================================
+let docs = [];
+let sampleMode = false;
+let view = { level: 'universe' };
+let selected = null;
 const sampleItems = window.Parse.parseText(SAMPLE, 'sample').map(it => ({ ...it, sample: true }));
-let shown = [];                       // what's on the map: your items, or the samples until you add some
-let net = null, filterTopic = null, query = '', selected = null;
 
 const store = {
-  col: null,                          // db collection when running on claude.ai
-  saveLocal() { if (!this.col) try { localStorage.setItem(STORE, JSON.stringify(items.map(plain))); } catch {} },
+  col: null,
+  saveLocal() { if (!this.col) try { localStorage.setItem(STORE, JSON.stringify(docs.map(plain))); } catch {} },
   async put(list) {
     if (!this.col) return this.saveLocal();
     for (let i = 0; i < list.length; i += 10) {
       if (list.length > 20) note(`Saving ${i} of ${list.length}…`);
-      await Promise.all(list.slice(i, i + 10).map(it => this.col.doc(it.id).set(plain(it))));
+      await Promise.all(list.slice(i, i + 10).map(d => this.col.doc(d.id).set(plain(d))));
     }
-    if (list.length > 20) note(`Saved to your claude.ai account (${items.length} items). Only you can see them.`);
+    if (list.length > 20) note('Saved to your claude.ai account. Only you can see it.');
   },
   async remove(list) {
     if (!this.col) return this.saveLocal();
-    for (let i = 0; i < list.length; i += 10) await Promise.all(list.slice(i, i + 10).map(it => this.col.doc(it.id).delete()));
+    for (let i = 0; i < list.length; i += 10) await Promise.all(list.slice(i, i + 10).map(d => this.col.doc(d.id).delete()));
   },
 };
-function plain({ c, sample, ...rest }) { return JSON.parse(JSON.stringify(rest)); }
+// strip everything the page computes before a document is saved
+function plain({ c, sample, implicit, g, sunRef, chosen, strength, ...rest }) { return JSON.parse(JSON.stringify(rest)); }
 function loadLocal() { try { return JSON.parse(localStorage.getItem(STORE) || '[]'); } catch { return []; } }
-// Save problems go in their own line so the training status can't overwrite them.
-const note = (msg, warn = false) => { const el = $('storenote'); el.textContent = msg; el.style.color = warn ? 'var(--warn)' : ''; };
+const note = (msg, warn = false) => { const el = $('storenote'); el.textContent = msg; el.classList.toggle('warn', warn); };
 const saveFailed = e => note(`Couldn't save your last change (${e?.code || e?.message || 'unknown error'}). It shows here but will be gone after a reload.`, true);
+const status = msg => { $('status').textContent = msg; };
+const save = list => store.put(list).catch(saveFailed);
+const unsave = list => store.remove(list).catch(saveFailed);
 
 async function connect() {
   const claude = window.claude;
-  if (!claude?.use) { items = loadLocal(); retrain(); return; }
+  if (!claude?.use) { docs = loadLocal(); changed(); return; }
   status('Opening your saved notes…');
   let col = null;
   try {
     const [db, user] = await Promise.all([claude.use('db'), claude.use('user')]);
     const uid = user && await user.id();
-    // Your private folder: data/users/<you>. Each note or quote is one document in it.
-    if (db && uid) col = db.collection('data/users/' + uid);
+    if (db && uid) col = db.collection('data/users/' + uid);  // your private folder
   } catch (e) { console.error(e); }
-  if (!col) {
-    items = loadLocal(); retrain();
-    note('Notes are saved in this browser only. Sign in to claude.ai to keep them across devices.', true);
-    return;
-  }
+  if (!col) { docs = loadLocal(); changed(); note('Saved in this browser only. Sign in to claude.ai to keep your notes across devices.', true); return; }
   store.col = col;
   const slow = setTimeout(() => status('Still connecting to your saved notes…'), 10000);
   col.onSnapshot(snap => {
     clearTimeout(slow);
-    items = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-    if (!snap.metadata.fromCache) note(`Saved to your claude.ai account (${items.length} items). Only you can see them.`);
-    retrain();
-  }, err => {
-    clearTimeout(slow);
-    note(`Couldn't load your saved notes (${err.code}). Reload the page to try again.`, true);
-    retrain();
-  });
+    docs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    if (!snap.metadata.fromCache) note('Saved to your claude.ai account. Only you can see it.');
+    changed();
+  }, err => { clearTimeout(slow); note(`Couldn't load your saved notes (${err.code}). Reload the page to try again.`, true); changed(); });
 }
 
-// ---------------- scene ----------------
+// ============================================================================
+// Model: galaxies -> suns -> planets, derived from docs + the net
+// ============================================================================
+let net = null, netKey = '', model = { galaxies: [] }, itemsNow = [];
+const SUN_COLORS = ['#ffd27a', '#ff9d7a', '#9fd6ff', '#c7a6ff', '#9dffc4', '#ff8fb8', '#f6f09a', '#8ab4ff'];
+
+const realItems = () => docs.filter(d => !d.kind);
+const galaxyDocs = () => docs.filter(d => d.kind === 'galaxy').sort((a, b) => (a.created || 0) - (b.created || 0));
+
+// The net retrains only when item text or teaching changes, not when you rename or move things.
+let trainTimer = null, classified = new Map();
+function changed() {
+  const items = realItems();
+  sampleMode = !items.length && !galaxyDocs().length;
+  const shown = sampleMode ? sampleItems : items;
+  const key = shown.map(i => i.id + ':' + i.text.length + ':' + (i.userTopic || '')).join('|');
+  if (key === netKey && net) { for (const it of shown) it.c = classified.get(it.id); rebuild(shown); return; }
+  status('Training the network…');
+  clearTimeout(trainTimer);
+  trainTimer = setTimeout(() => {
+    const t0 = performance.now();
+    const cur = sampleMode ? sampleItems : realItems();
+    net = buildNet(cur);
+    netKey = cur.map(i => i.id + ':' + i.text.length + ':' + (i.userTopic || '')).join('|');
+    classified = new Map(cur.map(it => [it.id, net.classify(it.text)]));
+    for (const it of cur) it.c = classified.get(it.id);
+    status(`Network: ${window.NN.DIM} inputs → ${net.H} hidden → ${TOPICS.length} topics\n` +
+      `${cur.length} ${sampleMode ? 'sample ' : ''}items · ${cur.filter(i => i.userTopic).length} taught · trained in ${Math.round(performance.now() - t0)} ms`);
+    rebuild(cur);
+  }, 120);
+}
+
+function cos(a, b) { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / (Math.sqrt(x * y) || 1); }
+
+function rebuild(items) {
+  itemsNow = items;
+  let gdocs = galaxyDocs();
+  // No galaxies saved yet: everything lives in an implicit "Quotes" galaxy sorted by the net.
+  if (!gdocs.length) gdocs = [{ id: 'quotes', kind: 'galaxy', name: sampleMode ? 'Sample quotes' : 'Quotes', mode: 'auto', implicit: true }];
+  const gids = new Set(gdocs.map(g => g.id));
+  const home = gids.has('quotes') ? 'quotes' : gdocs[0].id;
+  for (const it of items) it.g = gids.has(it.galaxy) ? it.galaxy : home;
+
+  model.galaxies = gdocs.map(g => {
+    const its = items.filter(it => it.g === g.id && it.c);
+    let suns;
+    if (g.mode === 'manual') {
+      const sdocs = docs.filter(d => d.kind === 'sun' && d.galaxy === g.id).sort((a, b) => (a.created || 0) - (b.created || 0));
+      suns = sdocs.map((s, i) => ({ id: s.id, doc: s, name: s.name, color: SUN_COLORS[i % SUN_COLORS.length], items: [] }));
+      const byId = new Map(suns.map((s, i) => [s.id, i]));
+      // Each sun's centre in the net's hidden space, from the planets you placed there yourself.
+      const cents = suns.map(s => {
+        const own = its.filter(it => it.sun === s.id);
+        if (!own.length) return null;
+        const v = new Array(own[0].c.h.length).fill(0);
+        own.forEach(it => it.c.h.forEach((x, j) => { v[j] += x / own.length; }));
+        return v;
+      });
+      for (const it of its) {
+        if (byId.has(it.sun)) {
+          const i = byId.get(it.sun);
+          it.chosen = true; it.strength = cents[i] ? (cos(it.c.h, cents[i]) + 1) / 2 : 1; suns[i].items.push(it); continue;
+        }
+        it.chosen = false;
+        let best = -2, bi = -1;
+        cents.forEach((v, i) => { if (v) { const s = cos(it.c.h, v); if (s > best) { best = s; bi = i; } } });
+        if (bi < 0 && suns.length) { bi = 0; best = 0; }
+        if (bi < 0) {   // no suns yet: hold items in an unnamed sun so nothing disappears
+          let un = suns.find(s => s.id === '_unsorted');
+          if (!un) { un = { id: '_unsorted', name: 'Unsorted', color: '#8f97b8', items: [], virtual: true }; suns.push(un); }
+          it.strength = 0.5; un.items.push(it); continue;
+        }
+        it.strength = (best + 1) / 2; suns[bi].items.push(it);
+      }
+    } else {
+      suns = TOPICS.map((t, k) => ({ id: 't:' + t.id, topic: k, name: t.name, color: t.color, pos: t.pos, items: [] }));
+      for (const it of its) {
+        const k = it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : it.c.top;
+        it.chosen = !!it.userTopic; it.strength = it.c.p[k];
+        suns[k].items.push(it);
+      }
+      suns = suns.filter(s => s.items.length);
+    }
+    for (const s of suns) { s.galaxy = g.id; for (const it of s.items) it.sunRef = s; }
+    return { id: g.id, doc: g, name: g.name, mode: g.mode || 'auto', suns, count: its.length };
+  });
+
+  $('samplenote').hidden = !sampleMode;
+  // stay where you are if that place still exists
+  const g = findGalaxy(view.galaxy);
+  if (view.level !== 'universe' && !g) view = { level: 'universe' };
+  else if (view.level === 'system' && !g.suns.find(s => s.id === view.sun)) view = { level: 'galaxy', galaxy: g.id };
+  buildLevel(true);
+  if (selected) { const again = items.find(i => i.id === selected.id); again && again.sunRef ? openDetail(again) : closeDetail(); }
+}
+
+const findGalaxy = id => model.galaxies.find(g => g.id === id);
+const findSun = (gid, sid) => findGalaxy(gid)?.suns.find(s => s.id === sid);
+
+// ============================================================================
+// Scene
+// ============================================================================
 const host = $('scene');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 host.appendChild(renderer.domElement);
 const labels = new CSS2DRenderer();
@@ -235,196 +361,439 @@ labels.domElement.style.cssText = 'position:absolute;inset:0;pointer-events:none
 host.appendChild(labels.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#0b0d12');
-scene.fog = new THREE.Fog('#0b0d12', 140, 320);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
-// Pull back on portrait screens so the whole spectrum fits across.
-const portrait = innerWidth < innerHeight;
-camera.position.set(0, 50, 165).multiplyScalar(portrait ? Math.min(2.6, 1.15 * innerHeight / innerWidth) : 1);
+scene.background = new THREE.Color('#060914');
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 3000);
+camera.position.set(0, 60, 180);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.autoRotate = true; controls.autoRotateSpeed = 0.25;
-renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; });
+controls.enableDamping = true; controls.enablePan = false; controls.maxDistance = 600;
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(40, 80, 60); scene.add(sun);
-
-const SPAN = 130;
-const xOf = s => (s - 0.5) * SPAN;
-// Topic hubs: x is their spot on the spectrum; y/z wind around the spine
-// so neighbouring topics don't overlap.
-const hubs = TOPICS.map((t, k) => {
-  const a = k * 2.4;
-  return new THREE.Vector3(xOf(t.pos), Math.sin(a) * 22, Math.cos(a) * 22);
-});
-
-// spine
-scene.add(new THREE.Line(
-  new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(xOf(0) - 10, 0, 0), new THREE.Vector3(xOf(1) + 10, 0, 0)]),
-  new THREE.LineBasicMaterial({ color: 0x3a4152 })));
-const label = (text, pos, cls = '') => {
-  const d = document.createElement('div'); d.className = 'label3d ' + cls; d.textContent = text;
-  const o = new CSS2DObject(d); o.position.copy(pos); scene.add(o); return d;
+// One soft round glow, drawn once and shared by every star, sun and galaxy.
+const glowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.25, 'rgba(255,255,255,.55)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+})();
+const glow = (color, size, opacity = 1) => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
+  s.scale.setScalar(size); return s;
 };
-label('PHILOSOPHY', new THREE.Vector3(xOf(0) - 16, -4, 0), 'axis');
-label('PRACTICAL ANALYSIS', new THREE.Vector3(xOf(1) + 22, -4, 0), 'axis');
 
-const hubLabels = TOPICS.map((t, k) => {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(1.4, 24, 16),
-    new THREE.MeshStandardMaterial({ color: t.color, emissive: t.color, emissiveIntensity: 0.5, transparent: true, opacity: 0.45 }));
-  m.position.copy(hubs[k]); m.userData.topic = k; scene.add(m);
-  scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(hubs[k].x, 0, 0), hubs[k]]),
-    new THREE.LineBasicMaterial({ color: 0x262b36 })));
-  return label(t.name, hubs[k].clone().add(new THREE.Vector3(0, 2.6, 0)));
+// Background starfield: the distant speckle, always present.
+{
+  const n = 1800, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const u = Math.random() * 2 - 1, t = Math.random() * Math.PI * 2, r = 700 + Math.random() * 900, s = Math.sqrt(1 - u * u);
+    pos.set([r * s * Math.cos(t), r * u, r * s * Math.sin(t)], i * 3);
+    const b = 0.4 + Math.random() * 0.6; col.set([b, b, b * 0.95], i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ size: 2.4, sizeAttenuation: false, vertexColors: true, map: glowTex, transparent: true, depthWrite: false })));
+}
+
+const level = new THREE.Group(); scene.add(level);
+let pickables = [], orbiters = [], hovered = null;
+const sunLight = new THREE.PointLight(0xffffff, 0, 0, 0); scene.add(sunLight);
+const planetGeo = new THREE.IcosahedronGeometry(1, 1);
+
+function label(text, cls, y = 0) {
+  const d = document.createElement('div'); d.className = 'label3d ' + (cls || ''); d.textContent = text;
+  const o = new CSS2DObject(d); o.position.y = y; return o;
+}
+function clearLevel() {
+  level.traverse(o => {
+    if (o.isCSS2DObject) o.element.remove();
+    if (o.geometry && o.geometry !== planetGeo) o.geometry.dispose();
+    o.material?.dispose?.();
+  });
+  level.clear(); pickables = []; orbiters = []; hovered = null; hideTip();
+}
+const hit = (r, data) => {   // invisible, generous click target
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+  m.userData = data; pickables.push(m); return m;
+};
+function jitter(str) { let h = 9; for (const ch of String(str)) h = Math.imul(h ^ ch.charCodeAt(0), 2654435761); return ((h >>> 0) % 1000) / 1000; }
+
+// ---- universe: each galaxy is a white dot among the stars ----
+function galaxyPos(i) { const a = i * 2.39996 + 0.6, r = 26 + 14 * Math.sqrt(i); return new THREE.Vector3(Math.cos(a) * r, (jitter('y' + i) - 0.5) * 26, Math.sin(a) * r); }
+function buildUniverse() {
+  model.galaxies.forEach((g, i) => {
+    const grp = new THREE.Group(); grp.position.copy(galaxyPos(i));
+    // a faint two-arm swirl, so up close the dot reads as a galaxy
+    const n = 120, pos = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) {
+      const arm = k % 2, t = (k / n) * 3.2, r = 0.6 + t * 1.6;
+      pos.set([Math.cos(t * 1.9 + arm * Math.PI) * r, (jitter(g.id + k) - 0.5) * 0.6, Math.sin(t * 1.9 + arm * Math.PI) * r], k * 3);
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const swirl = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.5, color: 0xf4f1e6, map: glowTex, transparent: true, opacity: 0.3, depthWrite: false }));
+    swirl.rotation.x = 0.5 + jitter(g.id) * 0.6; swirl.rotation.z = jitter(g.id + 'z');
+    const core = glow(0xffffff, 7);
+    const ring = glow(0xa9b8ff, 20, 0);   // lights up on hover
+    const lab = label(`${g.name} · ${g.count}`, 'galaxy', 5.5); lab.element.hidden = !noHover;
+    grp.add(swirl, core, ring, lab, hit(6, { kind: 'galaxy', galaxy: g.id, focus: grp.position, ring, lab, swirl }));
+    orbiters.push({ spin: swirl, speed: 0.05 });
+    level.add(grp);
+  });
+  setEmpty('');
+}
+
+// ---- galaxy: one sun per sub-category ----
+function sunPositions(g) {
+  if (g.mode === 'auto') return g.suns.map(s => { const a = s.topic * 2.4; return new THREE.Vector3((s.pos - 0.5) * 100, Math.sin(a) * 13, Math.cos(a) * 13); });
+  const n = g.suns.length, r = n < 2 ? 0 : 12 + n * 3;
+  return g.suns.map((s, i) => new THREE.Vector3(Math.cos(i / n * Math.PI * 2) * r, (jitter(s.id) - 0.5) * 6, Math.sin(i / n * Math.PI * 2) * r));
+}
+function buildGalaxy(g) {
+  const ps = sunPositions(g);
+  g.suns.forEach((s, i) => {
+    const grp = new THREE.Group(); grp.position.copy(ps[i]);
+    const rad = 1.4 + 0.45 * Math.sqrt(s.items.length);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(rad, 24, 16), new THREE.MeshBasicMaterial({ color: s.color }));
+    // a few specks preview the planets inside
+    const m = Math.min(s.items.length, 14), pos = new Float32Array(m * 3);
+    for (let k = 0; k < m; k++) { const a = jitter(s.items[k].id) * Math.PI * 2, r = rad + 1.5 + k * 0.45; pos.set([Math.cos(a) * r, 0, Math.sin(a) * r], k * 3); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const specks = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.7, color: 0xdfe3f0, map: glowTex, transparent: true, depthWrite: false }));
+    orbiters.push({ spin: specks, speed: 0.15 });
+    grp.add(ball, glow(s.color, rad * 6, 0.55), specks, label(`${s.name} · ${s.items.length}`, '', rad + 2.2),
+      hit(rad + 2, { kind: 'sun', galaxy: g.id, sun: s.id, focus: grp.position, ball }));
+    level.add(grp);
+  });
+  if (g.mode === 'auto' && g.suns.length) {
+    const a = label('← PHILOSOPHY', 'axis'); a.position.set(-46, -22, 0);
+    const b = label('PRACTICAL ANALYSIS →', 'axis'); b.position.set(46, -22, 0);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-56, 0, 0), new THREE.Vector3(56, 0, 0)]), new THREE.LineBasicMaterial({ color: 0x232a44 }));
+    level.add(a, b, line);
+  }
+  setEmpty(g.suns.length ? '' : g.mode === 'manual' ? 'No suns yet. Use "New sun" in the panel to make one.' : 'Nothing here yet. Add notes or quotes from the panel.');
+}
+
+// ---- system: planets orbit their sun; the tighter the orbit, the more surely they belong ----
+function buildSystem(g, s) {
+  const core = new THREE.Mesh(new THREE.SphereGeometry(3.4, 32, 20), new THREE.MeshBasicMaterial({ color: s.color }));
+  level.add(core, glow(s.color, 26, 0.6), label(s.name, '', 5.6));
+  sunLight.color.set(s.color).lerp(new THREE.Color(0xffffff), 0.6);
+  const base = new THREE.Color(s.color), hsl = {}; base.getHSL(hsl);
+  s.items.forEach((it, i) => {
+    const r = 8 + (1 - Math.min(1, Math.max(0, it.strength ?? 0.5))) * 18 + jitter(it.id + 'r') * 3 + (i % 3) * 0.6;
+    const tilt = new THREE.Group(); tilt.rotation.x = (jitter(it.id + 't') - 0.5) * 0.35; tilt.rotation.z = (jitter(it.id + 'z') - 0.5) * 0.35;
+    const orbitPts = []; for (let k = 0; k <= 72; k++) { const a = k / 72 * Math.PI * 2; orbitPts.push(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)); }
+    tilt.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(orbitPts), new THREE.LineBasicMaterial({ color: 0x2a3252, transparent: true, opacity: 0.7 })));
+    const size = 0.55 + Math.min(it.text.length, 700) / 700 * 0.75;   // longer passages, bigger planets
+    const color = new THREE.Color().setHSL((hsl.h + (jitter(it.id) - 0.5) * 0.12 + 1) % 1, 0.45 + jitter(it.id + 's') * 0.3, 0.55 + jitter(it.id + 'l') * 0.15);
+    const planet = new THREE.Group();
+    const body = new THREE.Mesh(planetGeo, new THREE.MeshLambertMaterial({ color, flatShading: true }));
+    body.scale.setScalar(size); planet.add(body);
+    if (it.type === 'quote') {   // quotes wear a ring
+      const ring = new THREE.Mesh(new THREE.RingGeometry(size * 1.45, size * 1.95, 40), new THREE.MeshBasicMaterial({ color: 0xf4f1e6, side: THREE.DoubleSide, transparent: true, opacity: 0.55 }));
+      ring.rotation.x = Math.PI / 2.4; planet.add(ring);
+    }
+    const sel = glow(0xffffff, size * 5, 0); planet.add(sel);
+    planet.add(hit(Math.max(size * 1.9, 1.3), { kind: 'planet', item: it, sel }));
+    tilt.add(planet);
+    const o = { planet, r, a: jitter(it.id + 'a') * Math.PI * 2, speed: 0.35 / Math.sqrt(r), item: it };
+    planet.position.set(Math.cos(o.a) * r, 0, Math.sin(o.a) * r);
+    orbiters.push(o); level.add(tilt);
+  });
+  setEmpty('');
+}
+
+function setEmpty(t) { $('empty').textContent = t; $('empty').hidden = !t; }
+
+// ---- camera framing per level ----
+function frame() {
+  if (view.level === 'universe') {
+    const r = Math.max(70, ...model.galaxies.map((_, i) => galaxyPos(i).length() + 20));
+    return { pos: new THREE.Vector3(0, r * 0.55, r * 1.7), target: new THREE.Vector3() };
+  }
+  const g = findGalaxy(view.galaxy);
+  if (view.level === 'galaxy') {
+    if (g.mode === 'auto') return { pos: new THREE.Vector3(0, 40, 132), target: new THREE.Vector3(0, -3, 0) };
+    const r = g.suns.length < 2 ? 14 : 12 + g.suns.length * 3;
+    return { pos: new THREE.Vector3(0, r * 1.1 + 10, r * 1.9 + 16), target: new THREE.Vector3() };
+  }
+  const s = findSun(view.galaxy, view.sun);
+  const far = Math.max(18, ...s.items.map(it => 8 + (1 - (it.strength ?? 0.5)) * 18 + 4));
+  return { pos: new THREE.Vector3(0, far * 0.75 + 6, far * 1.5 + 8), target: new THREE.Vector3() };
+}
+const portraitScale = () => innerWidth < innerHeight ? Math.min(2.2, 1.1 * innerHeight / innerWidth) : 1;
+
+let tween = null;
+function flyTo(pos, target, dur, done) {
+  if (reduceMotion || !dur) { camera.position.copy(pos); controls.target.copy(target); tween = null; done && done(); return; }
+  tween = { p0: camera.position.clone(), p1: pos.clone(), t0: controls.target.clone(), t1: target.clone(), start: performance.now(), dur, done };
+}
+function buildLevel(keepCamera) {
+  clearLevel();
+  const g = findGalaxy(view.galaxy);
+  sunLight.intensity = view.level === 'system' ? 2.2 : 0;
+  if (view.level === 'universe') buildUniverse();
+  else if (view.level === 'galaxy') buildGalaxy(g);
+  else buildSystem(g, findSun(view.galaxy, view.sun));
+  if (!keepCamera) {
+    $('levelForm').hidden = true;
+    const { pos, target } = frame(); pos.multiplyScalar(portraitScale());
+    controls.target.copy(target);
+    camera.position.copy(pos.clone().multiplyScalar(view.level === 'universe' ? 0.55 : 1.9));
+    flyTo(pos, target, 520);
+  }
+  renderCrumbs(); renderPanel();
+}
+// Zoom toward what was clicked, then open the next level.
+function go(next, focus) {
+  if (focus && !reduceMotion) {
+    const dir = camera.position.clone().sub(focus).normalize();
+    flyTo(focus.clone().add(dir.multiplyScalar(6)), focus.clone(), 360, () => { view = next; buildLevel(); });
+  } else { view = next; buildLevel(); }
+}
+function up() {
+  closeDetail();
+  if (view.level === 'system') go({ level: 'galaxy', galaxy: view.galaxy });
+  else if (view.level === 'galaxy') go({ level: 'universe' });
+}
+$('back').onclick = up;
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+  if (!$('detail').hidden) closeDetail(); else up();
 });
-
-const itemGroup = new THREE.Group(); scene.add(itemGroup);
-const noteGeo = new THREE.SphereGeometry(0.9, 12, 8);
-const quoteGeo = new THREE.OctahedronGeometry(1.25);
-let meshes = [];
 
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h); labels.setSize(w, h);
   camera.aspect = w / h;
-  // keep the map centred in the space beside the side panel on wide screens
   if (w > 720) camera.setViewOffset(w, h, -160, 0, w, h); else camera.clearViewOffset();
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize); resize();
 
-// ---------------- net + layout ----------------
-function status(msg) { $('status').textContent = msg; }
-
-// Debounced: a burst of changes (a big upload, live sync) trains once.
-let trainTimer = null;
-function retrain() {
-  status('Training the network…');
-  clearTimeout(trainTimer);
-  trainTimer = setTimeout(() => {
-    shown = items.length ? items : sampleItems;
-    $('samplenote').hidden = items.length > 0;
-    const t0 = performance.now();
-    net = buildNet(shown);
-    const ms = Math.round(performance.now() - t0);
-    for (const it of shown) it.c = net.classify(it.text);
-    status(`Network: ${window.NN.DIM} inputs → ${net.H} hidden → ${TOPICS.length} topics\n` +
-      `${shown.length} ${items.length ? '' : 'sample '}items · ${shown.filter(i => i.userTopic).length} taught · trained in ${ms} ms · loss ${net.loss.toFixed(3)}`);
-    layout();
-    if (selected) { const again = shown.find(i => i.id === selected.id); again ? openDetail(again) : closeDetail(); }
-  }, 120);
+// ---- pointer ----
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let downAt = null;
+function pick(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  return ray.intersectObjects(pickables, false)[0]?.object;
 }
+function hideTip() { $('tip').hidden = true; }
+function unhover(m) {
+  const d = m.userData;
+  if (d.kind === 'galaxy') { d.ring.material.opacity = 0; d.lab.element.hidden = !noHover; d.swirl.material.opacity = 0.3; }
+  if (d.kind === 'sun') d.ball.scale.setScalar(1);
+  if (d.kind === 'planet') d.sel.material.opacity = d.item === selected ? 0.9 : 0;
+}
+function setHover(m, e) {
+  if (hovered && hovered !== m) unhover(hovered);
+  hovered = m || null;
+  renderer.domElement.style.cursor = m ? 'pointer' : '';
+  if (!m) { hideTip(); return; }
+  const d = m.userData;
+  if (d.kind === 'galaxy') { d.ring.material.opacity = 0.5; d.lab.element.hidden = false; d.swirl.material.opacity = 0.85; }
+  if (d.kind === 'sun') d.ball.scale.setScalar(1.15);
+  if (d.kind !== 'planet') { hideTip(); return; }
+  d.sel.material.opacity = 0.6;
+  const it = d.item, tip = $('tip');
+  tip.textContent = (it.text.length > 170 ? it.text.slice(0, 170) + '…' : it.text) + (it.author ? `  — ${it.author}` : '');
+  tip.className = it.type === 'quote' ? 'quote' : '';
+  tip.hidden = false;
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - 310) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+}
+renderer.domElement.addEventListener('pointermove', e => setHover(pick(e), e));
+renderer.domElement.addEventListener('pointerleave', () => setHover(null));
+renderer.domElement.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+  const m = pick(e); if (!m) { closeDetail(); return; }
+  const d = m.userData;
+  if (d.kind === 'galaxy') go({ level: 'galaxy', galaxy: d.galaxy }, d.focus);
+  else if (d.kind === 'sun') go({ level: 'system', galaxy: d.galaxy, sun: d.sun }, d.focus);
+  else openDetail(d.item);
+});
 
-// Two fixed projections of the hidden layer give each item a personal offset,
-// so items the net "thinks about" similarly sit near each other.
-const proj = [0, 1].map(s => Array.from({ length: 64 }, (_, j) => Math.sin(j * 12.9898 + s * 78.233) * 43758.5453 % 1));
-
-function jitter(str) { let h = 9; for (const ch of String(str)) h = Math.imul(h ^ ch.charCodeAt(0), 2654435761); return ((h >>> 0) % 1000) / 1000; }
-
-function layout() {
-  itemGroup.clear(); meshes = [];
-  const counts = new Array(TOPICS.length).fill(0);
-  for (const it of shown) {
-    const c = it.c; if (!c) continue;
-    const k = it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : c.top;
-    counts[k]++;
-    const p = new THREE.Vector3();
-    c.p.forEach((v, j) => p.addScaledVector(hubs[j], v));
-    if (it.userTopic) p.lerp(hubs[k], 0.7);
-    // Orbit the item around where the net placed it: the angle comes from the
-    // hidden layer (similar thoughts share a side), nudged per item so twins don't overlap.
-    const oy = c.h.reduce((s, v, j) => s + v * proj[0][j], 0);
-    const oz = c.h.reduce((s, v, j) => s + v * proj[1][j], 0);
-    const ang = Math.atan2(oz, oy) + (jitter(it.id) - 0.5) * 1.4;
-    const rad = 4 + Math.min(Math.hypot(oy, oz), 6) + jitter(it.id + 'r') * 3;
-    p.y += Math.cos(ang) * rad; p.z += Math.sin(ang) * rad;
-    p.x = xOf(it.userTopic ? TOPICS[k].pos : c.spectrum) + (jitter(it.id + 'x') - 0.5) * 6;
-    const color = new THREE.Color(TOPICS[k].color);
-    const m = new THREE.Mesh(it.type === 'quote' ? quoteGeo : noteGeo,
-      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.25, transparent: true }));
-    m.position.copy(p); m.userData.item = it; m.userData.k = k;
-    itemGroup.add(m); meshes.push(m);
-    const link = new THREE.Line(new THREE.BufferGeometry().setFromPoints([p, hubs[k]]),
-      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.18 }));
-    link.userData.mesh = m; m.userData.link = link; itemGroup.add(link);
+// ---- loop ----
+let last = performance.now();
+renderer.setAnimationLoop(now => {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (tween) {
+    const k = Math.min(1, (now - tween.start) / tween.dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    camera.position.lerpVectors(tween.p0, tween.p1, e); controls.target.lerpVectors(tween.t0, tween.t1, e);
+    if (k === 1) { const d = tween.done; tween = null; d && d(); }
   }
-  hubLabels.forEach((d, k) => d.textContent = `${TOPICS[k].name}  ${counts[k] || ''}`);
-  renderTopics(counts);
-  applyFilter();
-}
-
-function applyFilter() {
-  const q = query.toLowerCase();
-  for (const m of meshes) {
-    const it = m.userData.item;
-    const show = (filterTopic === null || m.userData.k === filterTopic) &&
-      (!q || [it.text, it.author, it.context].some(f => (f || '').toLowerCase().includes(q)));
-    m.material.opacity = show ? 1 : 0.08;
-    m.userData.link.material.opacity = show ? 0.22 : 0.02;
-    m.scale.setScalar(it === selected ? 1.8 : 1);
+  if (!reduceMotion) for (const o of orbiters) {
+    if (o.spin) { o.spin.rotation.y += o.speed * dt; continue; }
+    if (hovered?.userData.item === o.item || selected === o.item) continue;   // hold still while you look at it
+    o.a += o.speed * dt; o.planet.position.set(Math.cos(o.a) * o.r, 0, Math.sin(o.a) * o.r);
   }
+  controls.update(); renderer.render(scene, camera); labels.render(scene, camera);
+});
+
+// ============================================================================
+// Panel
+// ============================================================================
+function renderCrumbs() {
+  const g = findGalaxy(view.galaxy), s = view.level === 'system' && findSun(view.galaxy, view.sun);
+  const parts = [view.level === 'universe' ? '<span class="here">Universe</span>' : '<a data-to="universe" tabindex="0">Universe</a>'];
+  if (g) parts.push(view.level === 'galaxy' ? `<span class="here">${esc(g.name)}</span>` : `<a data-to="galaxy" tabindex="0">${esc(g.name)}</a>`);
+  if (s) parts.push(`<span class="here">${esc(s.name)}</span>`);
+  $('trail').innerHTML = parts.join('<span class="sep">›</span>');
+  $('back').disabled = view.level === 'universe';
+  $('trail').querySelectorAll('a').forEach(a => { a.onclick = a.onkeydown = ev => {
+    if (ev.type === 'keydown' && ev.key !== 'Enter') return;
+    closeDetail(); go(a.dataset.to === 'universe' ? { level: 'universe' } : { level: 'galaxy', galaxy: view.galaxy });
+  }; });
 }
 
-function renderTopics(counts) {
-  const ul = $('topics'); ul.innerHTML = '';
-  TOPICS.forEach((t, k) => {
-    const li = document.createElement('li');
-    li.className = filterTopic === k ? 'on' : '';
-    li.innerHTML = `<span class="dot" style="background:${t.color}"></span><span></span><span class="n">${counts[k] || 0}</span>`;
-    li.children[1].textContent = t.name;
-    li.onclick = () => {
-      filterTopic = filterTopic === k ? null : k; renderTopics(counts); applyFilter();
-      if (filterTopic !== null) controls.target.lerp(hubs[k], 1);
-    };
-    ul.appendChild(li);
-  });
+let formMode = null;   // 'galaxy' | 'sun' | 'renameGalaxy' | 'renameSun'
+function armed(btn, text, fn) {   // two-step confirm: the first press arms, the second within 4 s acts
+  if (btn.dataset.armed) { fn(); return; }
+  const was = btn.textContent; btn.dataset.armed = '1'; btn.textContent = text; btn.classList.add('danger');
+  setTimeout(() => { delete btn.dataset.armed; btn.textContent = was; btn.classList.remove('danger'); }, 4000);
+}
+function renderPanel() {
+  const ul = $('list'); ul.innerHTML = '';
+  const g = findGalaxy(view.galaxy), s = view.level === 'system' ? findSun(view.galaxy, view.sun) : null;
+  const li = (html, onClick) => { const el = document.createElement('li'); el.tabIndex = 0; el.innerHTML = html; el.onclick = onClick; el.onkeydown = e => { if (e.key === 'Enter') onClick(); }; ul.appendChild(el); };
+  const acts = $('levelActions'); acts.innerHTML = '';
+  const btn = (text, fn) => { const b = document.createElement('button'); b.textContent = text; b.onclick = () => fn(b); acts.appendChild(b); return b; };
+  $('levelMsg').textContent = '';
+
+  if (view.level === 'universe') {
+    $('listTitle').textContent = 'Galaxies';
+    model.galaxies.forEach((x, i) => li(`<span class="dot" style="background:var(--star)"></span><span class="t">${esc(x.name)}</span><span class="badge">${x.mode === 'manual' ? 'named suns' : 'net-sorted'}</span><span class="n">${x.count}</span>`,
+      () => go({ level: 'galaxy', galaxy: x.id }, galaxyPos(i))));
+    if (!sampleMode) btn('New galaxy', () => openForm('galaxy'));
+  } else if (view.level === 'galaxy') {
+    $('listTitle').textContent = `Suns in ${g.name}`;
+    const ps = sunPositions(g);
+    g.suns.forEach((x, i) => li(`<span class="dot" style="background:${x.color}"></span><span class="t">${esc(x.name)}</span><span class="n">${x.items.length}</span>`,
+      () => go({ level: 'system', galaxy: g.id, sun: x.id }, ps[i])));
+    if (!g.suns.length) li(`<span class="t sub">${g.mode === 'manual' ? 'No suns yet' : 'Nothing here yet'}</span>`, () => {});
+    if (!sampleMode) {
+      if (g.mode === 'manual') btn('New sun', () => openForm('sun'));
+      btn('Rename galaxy', () => openForm('renameGalaxy', g.name));
+      btn('Delete galaxy', b => {
+        if (g.count) { $('levelMsg').textContent = `Move or delete its ${g.count} items first: open an item and change its galaxy.`; return; }
+        armed(b, 'Tap again to delete', () => {
+          const gone = [g.doc, ...docs.filter(d => d.kind === 'sun' && d.galaxy === g.id)].filter(d => !d.implicit);
+          docs = docs.filter(d => !gone.includes(d)); view = { level: 'universe' }; changed(); unsave(gone);
+        });
+      });
+    }
+  } else {
+    $('listTitle').textContent = `Planets around ${s.name}`;
+    s.items.forEach(it => li(`<span class="dot" style="background:${s.color};${it.type === 'quote' ? 'box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--star)' : ''}"></span><span class="t">${esc(it.text)}</span>`, () => openDetail(it)));
+    if (g.mode === 'manual' && !s.virtual && !sampleMode) {
+      btn('Rename sun', () => openForm('renameSun', s.name));
+      btn('Delete sun', b => armed(b, s.items.length ? 'Delete? Its planets move to other suns' : 'Tap again to delete', () => {
+        const moved = docs.filter(d => !d.kind && d.sun === s.id).map(d => { const n = { ...d }; delete n.sun; return n; });
+        docs = docs.filter(d => d !== s.doc).map(d => moved.find(m => m.id === d.id) || d);
+        view = { level: 'galaxy', galaxy: g.id }; changed(); unsave([s.doc]); if (moved.length) save(moved);
+      }));
+    }
+  }
+  renderAddTargets();
 }
 
-// ---------------- adding items ----------------
-function addItems(newOnes) {
-  if (!newOnes.length) { status('Nothing found to add.'); return; }
-  const seen = new Set(items.map(i => i.text));
-  const fresh = newOnes.filter(i => !seen.has(i.text) && seen.add(i.text));
-  if (!fresh.length) { status('Those are all on the map already.'); return; }
-  items.push(...fresh); retrain();
-  store.put(fresh).catch(saveFailed);
+function openForm(kind, value = '') {
+  formMode = kind;
+  $('levelForm').hidden = false; $('formModeRow').hidden = kind !== 'galaxy';
+  $('formName').value = value; $('formName').placeholder = /sun/i.test(kind) ? 'Sun name' : 'Galaxy name';
+  $('formOk').textContent = kind.startsWith('rename') ? 'Rename' : 'Create';
+  $('formName').focus();
 }
-
-$('add').onclick = () => {
-  const v = $('paste').value; if (!v.trim()) return;
-  addItems(window.Parse.parseText(v, 'pasted', $('ptype').value || undefined));
-  $('paste').value = '';
+$('formCancel').onclick = () => { $('levelForm').hidden = true; };
+$('formName').onkeydown = e => { if (e.key === 'Enter') $('formOk').click(); };
+const realize = g => ({ id: g.id, kind: 'galaxy', name: g.name, mode: g.mode, created: Date.now() - 1 });  // make the implicit galaxy a saved one
+$('formOk').onclick = () => {
+  const name = $('formName').value.trim();
+  if (!name) { $('levelMsg').textContent = 'Give it a name first.'; return; }
+  const g = findGalaxy(view.galaxy), writes = [];
+  if (formMode === 'galaxy') {
+    for (const x of model.galaxies) if (x.doc.implicit) writes.push(realize(x));
+    writes.push({ id: rid('g'), kind: 'galaxy', name, mode: $('formMode').value, created: Date.now() });
+  } else if (formMode === 'sun') writes.push({ id: rid('s'), kind: 'sun', galaxy: g.id, name, created: Date.now() });
+  else if (formMode === 'renameGalaxy') writes.push({ ...(g.doc.implicit ? realize(g) : g.doc), name });
+  else if (formMode === 'renameSun') writes.push({ ...findSun(view.galaxy, view.sun).doc, name });
+  docs = docs.filter(d => !writes.some(w => w.id === d.id)).concat(writes);
+  $('levelForm').hidden = true; changed(); save(writes);
 };
 
+// "Add into" follows where you are.
+function renderAddTargets() {
+  const gs = $('addGalaxy'), keep = gs.value;
+  gs.innerHTML = model.galaxies.map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('');
+  gs.value = view.galaxy && findGalaxy(view.galaxy) ? view.galaxy : (findGalaxy(keep) ? keep : model.galaxies[0]?.id || '');
+  renderAddSun();
+}
+function renderAddSun() {
+  const g = findGalaxy($('addGalaxy').value);
+  const real = g?.suns.filter(s => !s.virtual) || [];
+  $('addSunRow').hidden = !(g && g.mode === 'manual');
+  $('addSun').innerHTML = '<option value="">Let the net suggest</option>' + real.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  if (view.level === 'system' && view.galaxy === g?.id && real.find(s => s.id === view.sun)) $('addSun').value = view.sun;
+}
+$('addGalaxy').onchange = renderAddSun;
+
+function addItems(newOnes) {
+  if (!newOnes.length) { status('Nothing found to add.'); return; }
+  const g = findGalaxy($('addGalaxy').value) || model.galaxies[0], sun = $('addSun').value;
+  const seen = new Set(realItems().map(i => i.text));
+  const fresh = newOnes.filter(i => !seen.has(i.text) && seen.add(i.text));
+  if (!fresh.length) { status('Those are all on the map already.'); return; }
+  const gid = sampleMode ? 'quotes' : g.id;
+  const writes = fresh.map(it => ({ ...it, galaxy: gid, ...(g.mode === 'manual' && sun ? { sun } : {}) }));
+  if (sampleMode) writes.unshift({ id: 'quotes', kind: 'galaxy', name: 'Quotes', mode: 'auto', created: Date.now() - 1 });
+  else if (g.doc.implicit) writes.unshift(realize(g));
+  docs = docs.concat(writes);
+  changed(); save(writes);
+}
+$('add').onclick = () => { const v = $('paste').value; if (!v.trim()) return; addItems(window.Parse.parseText(v, 'pasted', $('ptype').value || undefined)); $('paste').value = ''; };
 async function readFiles(files) {
   const all = [];
-  for (const f of files) {
-    try { all.push(...window.Parse.parseFile(f.name, await f.text())); }
-    catch (e) { status(`Could not read ${f.name}: ${e.message}`); }
-  }
+  for (const f of files) { try { all.push(...window.Parse.parseFile(f.name, await f.text())); } catch (e) { status(`Could not read ${f.name}: ${e.message}`); } }
   addItems(all);
 }
-const drop = $('drop');
-drop.onclick = () => $('file').click();
-drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } };
+const dropEl = $('drop');
+dropEl.onclick = () => $('file').click();
+dropEl.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } };
 $('file').onchange = e => { readFiles([...e.target.files]); e.target.value = ''; };
-for (const t of [drop, document.body]) {
-  t.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
-  t.addEventListener('dragleave', () => drop.classList.remove('over'));
-  t.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); readFiles([...e.dataTransfer.files]); });
+for (const t of [dropEl, document.body]) {
+  t.addEventListener('dragover', e => { e.preventDefault(); dropEl.classList.add('over'); });
+  t.addEventListener('dragleave', () => dropEl.classList.remove('over'));
+  t.addEventListener('drop', e => { e.preventDefault(); dropEl.classList.remove('over'); readFiles([...e.dataTransfer.files]); });
 }
-
-$('search').oninput = e => { query = e.target.value; applyFilter(); };
 if (innerWidth <= 720) { $('side').classList.add('collapsed'); $('toggle').textContent = '▴'; }
 $('toggle').onclick = () => { $('side').classList.toggle('collapsed'); $('toggle').textContent = $('side').classList.contains('collapsed') ? '▴' : '▾'; };
 
+// Search every galaxy; a result flies straight to its planet.
+$('search').oninput = () => {
+  const q = $('search').value.trim().toLowerCase(), ul = $('results'); ul.innerHTML = '';
+  if (q.length < 2) return;
+  const hits = itemsNow.filter(it => it.sunRef && [it.text, it.author, it.context].some(f => (f || '').toLowerCase().includes(q))).slice(0, 30);
+  if (!hits.length) { ul.innerHTML = '<li class="sub">No matches.</li>'; return; }
+  for (const it of hits) {
+    const el = document.createElement('li'); el.tabIndex = 0;
+    el.innerHTML = '<span class="t" style="display:block"></span><span class="where"></span>';
+    el.children[0].textContent = it.text; el.children[1].textContent = `${findGalaxy(it.g).name} › ${it.sunRef.name}`;
+    el.onclick = el.onkeydown = e => {
+      if (e.type === 'keydown' && e.key !== 'Enter') return;
+      if (view.level !== 'system' || view.galaxy !== it.g || view.sun !== it.sunRef.id) { view = { level: 'system', galaxy: it.g, sun: it.sunRef.id }; buildLevel(); }
+      openDetail(it);
+    };
+    ul.appendChild(el);
+  }
+};
+
 $('export').onclick = async () => {
-  const data = { exported: new Date().toISOString(), topics: TOPICS.map(t => ({ id: t.id, name: t.name, position: t.pos })),
-    items: items.map(({ c, sample, ...it }) => ({ ...it, placedAs: c?.label, topic: TOPICS[it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : c?.top]?.id,
-      spectrum: c && +c.spectrum.toFixed(3) })) };
+  const data = { exported: new Date().toISOString(),
+    galaxies: model.galaxies.map(g => ({ id: g.id, name: g.name, mode: g.mode, suns: g.suns.map(s => s.name) })),
+    items: realItems().map(it => ({ ...plain(it), galaxyName: findGalaxy(it.g)?.name, sunName: it.sunRef?.name, placedAs: it.c?.label, spectrum: it.c && +it.c.spectrum.toFixed(3) })) };
   const json = JSON.stringify(data, null, 2);
   if (window.claude?.use) {
-    // claude.ai pages can't start downloads themselves; the viewer confirms a save instead
     const downloads = await window.claude.use('downloads');
     if (!downloads) { status('Saving files isn\'t available in this view.'); return; }
     try { await downloads.save({ filename: 'thought-spectrum.json', data: json }); status('Export saved.'); }
@@ -432,59 +801,33 @@ $('export').onclick = async () => {
     return;
   }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-  a.download = 'thought-spectrum.json'; a.click();
+  a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' })); a.download = 'thought-spectrum.json'; a.click();
 };
-// Two-step clear: the first press arms the button, the second within 4 s deletes.
-let clearArmed = null;
 $('clear').onclick = () => {
-  const btn = $('clear');
-  if (!items.length) { status('There are no notes of yours to clear.'); return; }
-  if (!clearArmed) {
-    btn.textContent = `Delete ${items.length}?`; btn.classList.add('danger');
-    clearArmed = setTimeout(() => { clearArmed = null; btn.textContent = 'Clear all'; btn.classList.remove('danger'); }, 4000);
-    return;
-  }
-  clearTimeout(clearArmed); clearArmed = null; btn.textContent = 'Clear all'; btn.classList.remove('danger');
-  const gone = items; items = []; closeDetail(); retrain();
-  store.remove(gone).catch(saveFailed);
+  if (!docs.length) { status('There is nothing of yours to clear.'); return; }
+  armed($('clear'), `Delete everything (${realItems().length} items)?`, () => {
+    const gone = docs; docs = []; closeDetail(); view = { level: 'universe' }; changed(); unsave(gone);
+  });
 };
 
-// ---------------- picking ----------------
-const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
-let downAt = null;
-function pick(e) {
-  const r = renderer.domElement.getBoundingClientRect();
-  ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(ptr, camera);
-  return ray.intersectObjects(meshes, false)[0]?.object;
+// ============================================================================
+// Detail card
+// ============================================================================
+function markSelected() {
+  for (const m of pickables) if (m.userData.kind === 'planet') m.userData.sel.material.opacity = m.userData.item === selected ? 0.9 : 0;
 }
-renderer.domElement.addEventListener('pointermove', e => {
-  const m = pick(e), tip = $('tip');
-  if (!m) { tip.style.display = 'none'; renderer.domElement.style.cursor = ''; return; }
-  const it = m.userData.item;
-  renderer.domElement.style.cursor = 'pointer';
-  tip.textContent = (it.text.length > 160 ? it.text.slice(0, 160) + '…' : it.text) + (it.author ? `  — ${it.author}` : '');
-  tip.className = it.type === 'quote' ? 'quote' : '';
-  tip.style.display = 'block';
-  tip.style.left = Math.min(e.clientX + 14, innerWidth - 300) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
-});
-renderer.domElement.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener('pointerup', e => {
-  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
-  const m = pick(e); if (m) openDetail(m.userData.item); else closeDetail();
-});
-
 function openDetail(it) {
-  selected = it; const c = it.c;
+  selected = it; const c = it.c, g = findGalaxy(it.g), s = it.sunRef;
   $('detail').hidden = false;
   $('teach').hidden = !!it.sample;
-  $('dtype').textContent = `${it.type.toUpperCase()} · from ${it.source}`;
+  $('dtype').textContent = `${it.type.toUpperCase()} · ${g.name} › ${s.name}`;
   $('dtext').textContent = it.type === 'quote' && !/^[“"]/.test(it.text) ? `“${it.text}”` : it.text;
   $('dtext').className = it.type === 'quote' ? 'quote' : '';
   $('dauthor').textContent = it.author ? `— ${it.author}` : '';
   $('dcontext').textContent = it.context ? `Your note: ${it.context}` : '';
-  $('dlabel').textContent = it.userTopic ? `${TOPICS.find(t => t.id === it.userTopic).name} (taught by you)` : c.label;
+  $('dlabel').textContent = g.mode === 'manual'
+    ? `${s.name} ${it.chosen ? '(you placed it)' : "(the net's suggestion)"}. The net reads it as ${c.label}.`
+    : it.userTopic ? `${s.name} (taught by you)` : c.label;
   $('dspec').style.left = `calc(${(c.spectrum * 100).toFixed(1)}% - 1px)`;
   const probs = $('dprobs'); probs.innerHTML = '';
   c.p.map((p, k) => ({ p, k })).sort((a, b) => b.p - a.p).slice(0, 3).forEach(({ p, k }) => {
@@ -493,27 +836,39 @@ function openDetail(it) {
     row.querySelector('span').textContent = TOPICS[k].name;
     probs.appendChild(row);
   });
-  const sel = $('reassign');
-  sel.innerHTML = `<option value="">Let the net decide</option>` + TOPICS.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-  sel.value = it.userTopic || '';
-  applyFilter();
+  const dsun = $('dsun');
+  if (g.mode === 'manual') {
+    dsun.innerHTML = '<option value="">Let the net suggest</option>' + g.suns.filter(x => !x.virtual).map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+    dsun.value = it.chosen ? it.sun : '';
+  } else {
+    dsun.innerHTML = '<option value="">Let the net decide</option>' + TOPICS.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    dsun.value = it.userTopic || '';
+  }
+  $('dgalaxy').innerHTML = model.galaxies.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
+  $('dgalaxy').value = it.g;
+  markSelected();
 }
-function closeDetail() { selected = null; $('detail').hidden = true; applyFilter(); }
+function closeDetail() { selected = null; $('detail').hidden = true; markSelected(); }
 $('close').onclick = closeDetail;
-$('reassign').onchange = e => {
-  if (e.target.value) selected.userTopic = e.target.value; else delete selected.userTopic;
-  const it = selected; retrain();
-  store.put([it]).catch(saveFailed);
+function updateItem(fn) {
+  const doc = docs.find(d => d.id === selected.id); if (!doc) return;
+  const next = { ...doc }; fn(next);
+  const writes = [next];
+  const g = findGalaxy(next.galaxy || selected.g);
+  if (g?.doc.implicit) writes.unshift(realize(g));
+  docs = docs.map(d => d === doc ? next : d).concat(writes.filter(w => w !== next));
+  changed(); save(writes);
+}
+$('dsun').onchange = e => {
+  const v = e.target.value, manual = findGalaxy(selected.g).mode === 'manual';
+  updateItem(d => { if (manual) { if (v) d.sun = v; else delete d.sun; } else { if (v) d.userTopic = v; else delete d.userTopic; } });
 };
+$('dgalaxy').onchange = e => { const v = e.target.value; updateItem(d => { d.galaxy = v; delete d.sun; }); closeDetail(); };
 $('remove').onclick = () => {
-  const it = selected; items = items.filter(i => i !== it); closeDetail(); retrain();
-  store.remove([it]).catch(saveFailed);
+  const doc = docs.find(d => d.id === selected.id);
+  docs = docs.filter(d => d !== doc); closeDetail(); changed(); if (doc) unsave([doc]);
 };
 
-// ---------------- loop ----------------
-renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); labels.render(scene, camera); });
-
-
-
+buildLevel();
 connect();
 </script>

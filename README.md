@@ -7,23 +7,30 @@ and it sorts them along a spectrum that runs from **philosophy** to **practical 
 
 ## Use it
 
-Open `index.html` in a browser. No build step and no server needed (it needs internet once to
-load three.js from a CDN). Then:
+Open `index.html` in a browser. It needs no build step and no server, but it does need internet
+once to load three.js from a CDN.
 
-- **Upload**: drop `.txt`, `.md`, `.csv` or `.json` files onto the page, or click the upload box.
-- **Paste**: put one note or quote per paragraph. Quotes are detected from quotation marks,
-  `>` blockquotes, or an attribution line like `— Marcus Aurelius`. You can also force a type.
-- **Explore**: drag to orbit, scroll to zoom. Hover a point to read it and click it for details.
-  Click a topic in the list to highlight it, or use the search box.
-- **Teach**: in the detail panel, reassign an item to a different topic. The net retrains with
-  your correction, which also shifts how it places similar items.
-- **Export**: download everything as JSON, with each item's topic and spectrum position.
-  You can upload that file again later.
+**The map has three levels:**
 
-Your items are saved in this browser's local storage. Nothing is uploaded anywhere.
+1. **Universe.** Each galaxy is a white dot among the stars. Hover over one to see its name, and
+   click to fly in. A galaxy is a collection, such as Quotes, Notes, or the research for one article.
+2. **Galaxy.** Each sun is a sub-category. A galaxy works in one of two ways:
+   - **Net-sorted:** the suns are the net's topics, laid out from philosophy (left) to practical
+     analysis (right). They appear as items land in them.
+   - **Named suns:** you create and name the suns. When you add something without choosing a sun,
+     the net suggests one by comparing it with what you've already placed in each.
+3. **Solar system.** Each planet is a note or quote. Quotes wear a ring, and longer passages are
+   bigger planets. The tighter the orbit, the more surely the item belongs to that sun.
 
-**Shapes:** spheres are notes and diamonds are quotes. Colour shows the topic. Faint lines link
-each item to its topic hub.
+Hover over a planet to read it, and click it for details. Use **Esc** or **←** to go back up a level.
+
+**Working with items:**
+
+- **Add:** paste text or drop files into the panel, choosing a galaxy, and a sun for named-sun galaxies.
+- **Teach:** in the detail card, move an item to another sun or galaxy. In net-sorted galaxies
+  this retrains the net.
+- **Search:** finds items in every galaxy, and picking a result flies to its planet.
+- **Export:** downloads everything as JSON.
 
 ### File formats
 
