@@ -36,7 +36,7 @@
   h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
   .sub { color: var(--muted); font-size: 11px; }
   .warn { color: var(--warn); }
-  textarea, input[type=search], input[type=text], select { width: 100%; background: #0b0f1d; color: var(--text); border: 1px solid var(--line);
+  textarea, input[type=search], input[type=text], input[type=url], select { width: 100%; background: #0b0f1d; color: var(--text); border: 1px solid var(--line);
     border-radius: 5px; padding: 6px; font: inherit; }
   textarea { height: 76px; resize: vertical; }
   button { background: var(--raised); color: var(--text); border: 1px solid #343c5c; border-radius: 5px; padding: 5px 10px;
@@ -57,6 +57,12 @@
   ul.list .where { display: block; color: var(--muted); font-size: 10px; }
   #results li { display: block; }
   .badge { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; flex: none; }
+  #dlinks { max-height: none; }
+  #dlinks li { cursor: default; }
+  #dlinks a { color: var(--accent); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  #dlinks a:hover { text-decoration: underline; }
+  #dlinks .host { color: var(--muted); font-size: 10px; flex: none; }
+  #dlinks button { margin-left: auto; padding: 0 7px; flex: none; }
   #status { color: var(--muted); font-size: 11px; margin-top: 10px; white-space: pre-line; }
   .quote { font-style: italic; }
   .bar { height: 6px; background: var(--raised); border-radius: 3px; overflow: hidden; margin: 2px 0 6px; }
@@ -147,6 +153,13 @@
   <p id="dtext" style="margin:8px 0 4px; white-space: pre-line"></p>
   <div id="dauthor" class="sub"></div>
   <div id="dcontext" class="sub" style="margin-top:4px"></div>
+  <h2>Links</h2>
+  <ul id="dlinks" class="list"></ul>
+  <div id="linkForm">
+    <div class="row"><input id="linkUrl" type="url" placeholder="https://… article or video" aria-label="Link address"></div>
+    <div class="row"><input id="linkName" type="text" placeholder="Label (optional)" aria-label="Link label"><button id="linkAdd">Add link</button></div>
+    <div id="linkMsg" class="sub warn" style="margin-top:4px"></div>
+  </div>
   <h2>Placed as</h2>
   <div id="dlabel"></div>
   <div class="spec"><i id="dspec"></i></div>
@@ -499,6 +512,12 @@ function buildSystem(g, s) {
       const ring = new THREE.Mesh(new THREE.RingGeometry(size * 1.45, size * 1.95, 40), new THREE.MeshBasicMaterial({ color: 0xf4f1e6, side: THREE.DoubleSide, transparent: true, opacity: 0.55 }));
       ring.rotation.x = Math.PI / 2.4; planet.add(ring);
     }
+    if (it.links?.length) {   // a small moon marks a planet with links
+      const pivot = new THREE.Group(), moon = new THREE.Mesh(planetGeo, new THREE.MeshLambertMaterial({ color: 0xe8e6dc, flatShading: true }));
+      moon.scale.setScalar(Math.max(0.22, size * 0.32)); moon.position.set(size * 2.6, 0.2, 0);
+      pivot.rotation.z = 0.35; pivot.add(moon); planet.add(pivot);
+      orbiters.push({ spin: pivot, speed: 1.1 });
+    }
     const sel = glow(0xffffff, size * 5, 0); planet.add(sel);
     planet.add(hit(Math.max(size * 1.9, 1.3), { kind: 'planet', item: it, sel }));
     tilt.add(planet);
@@ -604,7 +623,8 @@ function setHover(m, e) {
   if (d.kind !== 'planet') { hideTip(); return; }
   d.sel.material.opacity = 0.6;
   const it = d.item, tip = $('tip');
-  tip.textContent = (it.text.length > 170 ? it.text.slice(0, 170) + '…' : it.text) + (it.author ? `  — ${it.author}` : '');
+  const nl = it.links?.length || 0;
+  tip.textContent = (it.text.length > 170 ? it.text.slice(0, 170) + '…' : it.text) + (it.author ? `  — ${it.author}` : '') + (nl ? `  · ${nl} link${nl > 1 ? 's' : ''}` : '');
   tip.className = it.type === 'quote' ? 'quote' : '';
   tip.hidden = false;
   tip.style.left = Math.min(e.clientX + 14, innerWidth - 310) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
@@ -692,7 +712,7 @@ function renderPanel() {
     }
   } else {
     $('listTitle').textContent = `Planets around ${s.name}`;
-    s.items.forEach(it => li(`<span class="dot" style="background:${s.color};${it.type === 'quote' ? 'box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--star)' : ''}"></span><span class="t">${esc(it.text)}</span>`, () => openDetail(it)));
+    s.items.forEach(it => li(`<span class="dot" style="background:${s.color};${it.type === 'quote' ? 'box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--star)' : ''}"></span><span class="t">${esc(it.text)}</span>${it.links?.length ? `<span class="badge">${it.links.length} link${it.links.length > 1 ? 's' : ''}</span>` : ''}`, () => openDetail(it)));
     if (g.mode === 'manual' && !s.virtual && !sampleMode) {
       btn('Rename sun', () => openForm('renameSun', s.name));
       btn('Delete sun', b => armed(b, s.items.length ? 'Delete? Its planets move to other suns' : 'Tap again to delete', () => {
@@ -780,7 +800,7 @@ $('toggle').onclick = () => { $('side').classList.toggle('collapsed'); $('toggle
 $('search').oninput = () => {
   const q = $('search').value.trim().toLowerCase(), ul = $('results'); ul.innerHTML = '';
   if (q.length < 2) return;
-  const hits = itemsNow.filter(it => it.sunRef && [it.text, it.author, it.context].some(f => (f || '').toLowerCase().includes(q))).slice(0, 30);
+  const hits = itemsNow.filter(it => it.sunRef && [it.text, it.author, it.context, ...(it.links || []).flatMap(l => [l.url, l.title])].some(f => (f || '').toLowerCase().includes(q))).slice(0, 30);
   if (!hits.length) { ul.innerHTML = '<li class="sub">No matches.</li>'; return; }
   for (const it of hits) {
     const el = document.createElement('li'); el.tabIndex = 0;
@@ -832,6 +852,7 @@ function openDetail(it) {
   $('dtext').className = it.type === 'quote' ? 'quote' : '';
   $('dauthor').textContent = it.author ? `— ${it.author}` : '';
   $('dcontext').textContent = it.context ? `Your note: ${it.context}` : '';
+  renderLinks(it);
   $('dlabel').textContent = g.mode === 'manual'
     ? `${s.name} ${it.chosen ? '(you placed it)' : "(the net's suggestion)"}. The net reads it as ${c.label}.`
     : it.userTopic ? `${s.name} (taught by you)` : c.label;
@@ -855,7 +876,37 @@ function openDetail(it) {
   $('dgalaxy').value = it.g;
   markSelected();
 }
-function closeDetail() { selected = null; $('detail').hidden = true; markSelected(); }
+// Links: articles, videos or anything else that belongs with this idea.
+function renderLinks(it) {
+  const ul = $('dlinks'); ul.innerHTML = '';
+  $('linkForm').hidden = !!it.sample;
+  const links = it.links || [];
+  if (!links.length) { ul.innerHTML = '<li class="sub">No links yet.</li>'; return; }
+  links.forEach((l, i) => {
+    const li = document.createElement('li');
+    const a = document.createElement('a'); a.href = l.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    let host = ''; try { host = new URL(l.url).hostname.replace(/^www\./, ''); } catch {}
+    a.textContent = l.title || host || l.url; a.title = l.url;
+    const h = document.createElement('span'); h.className = 'host'; h.textContent = l.title ? host : '';
+    const x = document.createElement('button'); x.textContent = '×'; x.setAttribute('aria-label', `Remove link ${a.textContent}`);
+    x.onclick = () => updateItem(d => { d.links = (d.links || []).filter((_, j) => j !== i); if (!d.links.length) delete d.links; });
+    li.append(a, h, x); ul.appendChild(li);
+  });
+}
+function addLink() {
+  const raw = $('linkUrl').value.trim(), title = $('linkName').value.trim();
+  if (!raw) { $('linkMsg').textContent = 'Paste a web address first.'; return; }
+  let url;
+  try { url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : 'https://' + raw); } catch { url = null; }
+  if (!url || !/^https?:$/.test(url.protocol) || !url.hostname.includes('.')) { $('linkMsg').textContent = 'That doesn\'t look like a web address. It should start with https:// or a site name like youtube.com.'; return; }
+  if ((selected.links || []).some(l => l.url === url.href)) { $('linkMsg').textContent = 'That link is already here.'; return; }
+  updateItem(d => { d.links = [...(d.links || []), { url: url.href, ...(title ? { title } : {}), added: Date.now() }]; });
+  $('linkUrl').value = ''; $('linkName').value = ''; $('linkMsg').textContent = '';
+}
+$('linkAdd').onclick = addLink;
+$('linkUrl').onkeydown = $('linkName').onkeydown = e => { if (e.key === 'Enter') addLink(); };
+
+function closeDetail() { $('linkMsg').textContent = ''; selected = null; $('detail').hidden = true; markSelected(); }
 $('close').onclick = closeDetail;
 function updateItem(fn) {
   const doc = docs.find(d => d.id === selected.id); if (!doc) return;

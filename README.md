@@ -29,7 +29,10 @@ Hover over a planet to read it, and click it for details. Use **Esc** or **←**
 - **Add:** paste text or drop files into the panel, choosing a galaxy, and a sun for named-sun galaxies.
 - **Teach:** in the detail card, move an item to another sun or galaxy. In net-sorted galaxies
   this retrains the net.
-- **Search:** finds items in every galaxy, and picking a result flies to its planet.
+- **Links:** in the detail card, add links to articles, videos or anything else that belongs with an
+  idea, each with an optional label. They open in a new tab, and planets with links get a small moon.
+- **Search:** finds items in every galaxy, including link labels and addresses, and picking a result
+  flies to its planet.
 - **Export:** downloads everything as JSON.
 
 ### File formats
