@@ -57,6 +57,8 @@
   ul.list .where { display: block; color: var(--muted); font-size: 10px; }
   #results li { display: block; }
   .badge { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; flex: none; }
+  ul.list li button.mini { margin-left: 2px; padding: 0 6px; font-size: 10px; flex: none; opacity: .7; }
+  ul.list li:hover button.mini, ul.list li button.mini:focus-visible { opacity: 1; }
   #dlinks { max-height: none; }
   #dlinks li { cursor: default; }
   #dlinks a { color: var(--accent); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -214,7 +216,8 @@ const SAMPLE = `"He who has a why to live can bear almost any how." — Friedric
 // ============================================================================
 // Data. Everything lives as documents in one collection:
 //   galaxy  { kind:'galaxy', name, mode:'auto'|'manual', created }
-//   sun     { kind:'sun', galaxy, name, created }            (manual galaxies only)
+//   sun     { kind:'sun', galaxy, name, created }            (a sun you named, in any galaxy)
+//   A net-sorted galaxy may rename its topic suns: galaxy.sunNames = { topicId: name }.
 //   item    { text, author, type, source, added, galaxy?, sun?, userTopic?, context? }
 // Items saved before galaxies existed have no `galaxy`; they belong to Quotes.
 // ============================================================================
@@ -274,6 +277,7 @@ async function connect() {
 // Model: galaxies -> suns -> planets, derived from docs + the net
 // ============================================================================
 let net = null, netKey = '', model = { galaxies: [] }, itemsNow = [];
+const OWN_COLORS = ['#ff6fd8', '#f4f1e6', '#ff9a3c', '#3cc8ff'];   // your suns in net-sorted galaxies: hues the topics don't use
 const SUN_COLORS = ['#ffd27a', '#ff9d7a', '#9fd6ff', '#c7a6ff', '#9dffc4', '#ff8fb8', '#f6f09a', '#8ab4ff'];
 
 const realItems = () => docs.filter(d => !d.kind);
@@ -345,16 +349,23 @@ function rebuild(items) {
         it.strength = (best + 1) / 2; suns[bi].items.push(it);
       }
     } else {
-      suns = TOPICS.map((t, k) => ({ id: 't:' + t.id, topic: k, name: t.name, color: t.color, pos: t.pos, items: [] }));
+      const names = g.sunNames || {};
+      suns = TOPICS.map((t, k) => ({ id: 't:' + t.id, topic: k, name: names[t.id] || t.name, color: t.color, pos: t.pos, items: [] }));
+      // suns you made yourself sit beside the net's topics; only you put planets in them
+      const own = docs.filter(d => d.kind === 'sun' && d.galaxy === g.id).sort((a, b) => (a.created || 0) - (b.created || 0))
+        .map((d, i) => ({ id: d.id, doc: d, custom: true, order: i, name: d.name, color: OWN_COLORS[i % OWN_COLORS.length], items: [] }));
+      const ownById = new Map(own.map(x => [x.id, x]));
       for (const it of its) {
+        if (ownById.has(it.sun)) { it.chosen = true; it.strength = 1; ownById.get(it.sun).items.push(it); continue; }
         const k = it.userTopic ? TOPICS.findIndex(t => t.id === it.userTopic) : it.c.top;
         it.chosen = !!it.userTopic; it.strength = it.c.p[k];
         suns[k].items.push(it);
       }
-      suns = suns.filter(s => s.items.length);
+      for (const x of own) x.pos = x.items.length ? x.items.reduce((a, it) => a + it.c.spectrum, 0) / x.items.length : 0.5;
+      suns = suns.filter(x => x.items.length).concat(own);
     }
     for (const s of suns) { s.galaxy = g.id; for (const it of s.items) it.sunRef = s; }
-    return { id: g.id, doc: g, name: g.name, mode: g.mode || 'auto', suns, count: its.length };
+    return { id: g.id, doc: g, name: g.name, mode: g.mode || 'auto', suns, count: its.length, topicName: k => (g.sunNames || {})[TOPICS[k].id] || TOPICS[k].name };
   });
 
   $('samplenote').hidden = !sampleMode;
@@ -463,7 +474,10 @@ function buildUniverse() {
 
 // ---- galaxy: one sun per sub-category ----
 function sunPositions(g) {
-  if (g.mode === 'auto') return g.suns.map(s => { const a = s.topic * 2.4; return new THREE.Vector3((s.pos - 0.5) * 100, Math.sin(a) * 13, Math.cos(a) * 13); });
+  if (g.mode === 'auto') return g.suns.map(s => {
+    const a = s.custom ? (s.order + 0.5) * 2.1 : s.topic * 2.4, r = s.custom ? 24 : 13;
+    return new THREE.Vector3((s.pos - 0.5) * 100, Math.sin(a) * r, Math.cos(a) * r);
+  });
   const n = g.suns.length, r = n < 2 ? 0 : 12 + n * 3;
   return g.suns.map((s, i) => new THREE.Vector3(Math.cos(i / n * Math.PI * 2) * r, (jitter(s.id) - 0.5) * 6, Math.sin(i / n * Math.PI * 2) * r));
 }
@@ -489,7 +503,7 @@ function buildGalaxy(g) {
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-56, 0, 0), new THREE.Vector3(56, 0, 0)]), new THREE.LineBasicMaterial({ color: 0x232a44 }));
     level.add(a, b, line);
   }
-  setEmpty(g.suns.length ? '' : g.mode === 'manual' ? 'No suns yet. Use "New sun" in the panel to make one.' : 'Nothing here yet. Add notes or quotes from the panel.');
+  setEmpty(g.suns.length ? '' : g.mode === 'manual' ? 'No suns yet. Use "New sun" in the panel to make one.' : 'Nothing here yet. Add notes or quotes, or make a sun, from the panel.');
 }
 
 // ---- system: planets orbit their sun; the tighter the orbit, the more surely they belong ----
@@ -696,11 +710,17 @@ function renderPanel() {
   } else if (view.level === 'galaxy') {
     $('listTitle').textContent = `Suns in ${g.name}`;
     const ps = sunPositions(g);
-    g.suns.forEach((x, i) => li(`<span class="dot" style="background:${x.color}"></span><span class="t">${esc(x.name)}</span><span class="n">${x.items.length}</span>`,
-      () => go({ level: 'system', galaxy: g.id, sun: x.id }, ps[i])));
+    g.suns.forEach((x, i) => {
+      li(`<span class="dot" style="background:${x.color}"></span><span class="t">${esc(x.name)}</span><span class="n">${x.items.length}</span>`,
+        () => go({ level: 'system', galaxy: g.id, sun: x.id }, ps[i]));
+      if (x.virtual || sampleMode) return;
+      const r = document.createElement('button'); r.textContent = 'Rename'; r.className = 'mini'; r.setAttribute('aria-label', `Rename ${x.name}`);
+      r.onclick = e => { e.stopPropagation(); openForm('renameSun', x.name, x.id); };
+      ul.lastChild.appendChild(r);
+    });
     if (!g.suns.length) li(`<span class="t sub">${g.mode === 'manual' ? 'No suns yet' : 'Nothing here yet'}</span>`, () => {});
     if (!sampleMode) {
-      if (g.mode === 'manual') btn('New sun', () => openForm('sun'));
+      btn('New sun', () => openForm('sun'));
       btn('Rename galaxy', () => openForm('renameGalaxy', g.name));
       btn('Delete galaxy', b => {
         if (g.count) { $('levelMsg').textContent = `Move or delete its ${g.count} items first: open an item and change its galaxy.`; return; }
@@ -713,9 +733,9 @@ function renderPanel() {
   } else {
     $('listTitle').textContent = `Planets around ${s.name}`;
     s.items.forEach(it => li(`<span class="dot" style="background:${s.color};${it.type === 'quote' ? 'box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--star)' : ''}"></span><span class="t">${esc(it.text)}</span>${it.links?.length ? `<span class="badge">${it.links.length} link${it.links.length > 1 ? 's' : ''}</span>` : ''}`, () => openDetail(it)));
-    if (g.mode === 'manual' && !s.virtual && !sampleMode) {
-      btn('Rename sun', () => openForm('renameSun', s.name));
-      btn('Delete sun', b => armed(b, s.items.length ? 'Delete? Its planets move to other suns' : 'Tap again to delete', () => {
+    if (!s.virtual && !sampleMode) btn('Rename sun', () => openForm('renameSun', s.name, s.id));
+    if (s.doc && !sampleMode) {
+      btn('Delete sun', b => armed(b, s.items.length ? (g.mode === 'manual' ? 'Delete? Its planets move to other suns' : 'Delete? The net re-sorts its planets') : 'Tap again to delete', () => {
         const moved = docs.filter(d => !d.kind && d.sun === s.id).map(d => { const n = { ...d }; delete n.sun; return n; });
         docs = docs.filter(d => d !== s.doc).map(d => moved.find(m => m.id === d.id) || d);
         view = { level: 'galaxy', galaxy: g.id }; changed(); unsave([s.doc]); if (moved.length) save(moved);
@@ -725,8 +745,9 @@ function renderPanel() {
   renderAddTargets();
 }
 
-function openForm(kind, value = '') {
-  formMode = kind;
+let formTarget = null;
+function openForm(kind, value = '', target = null) {
+  formMode = kind; formTarget = target;
   $('levelForm').hidden = false; $('formModeRow').hidden = kind !== 'galaxy';
   $('formName').value = value; $('formName').placeholder = /sun/i.test(kind) ? 'Sun name' : 'Galaxy name';
   $('formOk').textContent = kind.startsWith('rename') ? 'Rename' : 'Create';
@@ -744,7 +765,15 @@ $('formOk').onclick = () => {
     writes.push({ id: rid('g'), kind: 'galaxy', name, mode: $('formMode').value, created: Date.now() });
   } else if (formMode === 'sun') writes.push({ id: rid('s'), kind: 'sun', galaxy: g.id, name, created: Date.now() });
   else if (formMode === 'renameGalaxy') writes.push({ ...(g.doc.implicit ? realize(g) : g.doc), name });
-  else if (formMode === 'renameSun') writes.push({ ...findSun(view.galaxy, view.sun).doc, name });
+  else if (formMode === 'renameSun') {
+    const sun = findSun(view.galaxy, formTarget || view.sun);
+    if (!sun) return;
+    if (sun.doc) writes.push({ ...sun.doc, name });
+    else {   // one of the net's topics: the new name belongs to this galaxy only
+      const base = g.doc.implicit ? realize(g) : g.doc;
+      writes.push({ ...base, sunNames: { ...(base.sunNames || {}), [TOPICS[sun.topic].id]: name } });
+    }
+  }
   docs = docs.filter(d => !writes.some(w => w.id === d.id)).concat(writes);
   $('levelForm').hidden = true; changed(); save(writes);
 };
@@ -758,9 +787,9 @@ function renderAddTargets() {
 }
 function renderAddSun() {
   const g = findGalaxy($('addGalaxy').value);
-  const real = g?.suns.filter(s => !s.virtual) || [];
-  $('addSunRow').hidden = !(g && g.mode === 'manual');
-  $('addSun').innerHTML = '<option value="">Let the net suggest</option>' + real.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  const real = g?.suns.filter(s => s.doc) || [];   // suns you made (topic suns are the net's to fill)
+  $('addSunRow').hidden = !real.length;
+  $('addSun').innerHTML = `<option value="">${g?.mode === 'manual' ? 'Let the net suggest' : 'Let the net sort it'}</option>` + real.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
   if (view.level === 'system' && view.galaxy === g?.id && real.find(s => s.id === view.sun)) $('addSun').value = view.sun;
 }
 $('addGalaxy').onchange = renderAddSun;
@@ -772,7 +801,7 @@ function addItems(newOnes) {
   const fresh = newOnes.filter(i => !seen.has(i.text) && seen.add(i.text));
   if (!fresh.length) { status('Those are all on the map already.'); return; }
   const gid = sampleMode ? 'quotes' : g.id;
-  const writes = fresh.map(it => ({ ...it, galaxy: gid, ...(g.mode === 'manual' && sun ? { sun } : {}) }));
+  const writes = fresh.map(it => ({ ...it, galaxy: gid, ...(sun && !sampleMode ? { sun } : {}) }));
   if (sampleMode) writes.unshift({ id: 'quotes', kind: 'galaxy', name: 'Quotes', mode: 'auto', created: Date.now() - 1 });
   else if (g.doc.implicit) writes.unshift(realize(g));
   docs = docs.concat(writes);
@@ -853,7 +882,7 @@ function openDetail(it) {
   $('dauthor').textContent = it.author ? `— ${it.author}` : '';
   $('dcontext').textContent = it.context ? `Your note: ${it.context}` : '';
   renderLinks(it);
-  $('dlabel').textContent = g.mode === 'manual'
+  $('dlabel').textContent = g.mode === 'manual' || s.custom
     ? `${s.name} ${it.chosen ? '(you placed it)' : "(the net's suggestion)"}. The net reads it as ${c.label}.`
     : it.userTopic ? `${s.name} (taught by you)` : c.label;
   $('dspec').style.left = `calc(${(c.spectrum * 100).toFixed(1)}% - 1px)`;
@@ -861,7 +890,7 @@ function openDetail(it) {
   c.p.map((p, k) => ({ p, k })).sort((a, b) => b.p - a.p).slice(0, 3).forEach(({ p, k }) => {
     const row = document.createElement('div');
     row.innerHTML = `<div class="ends"><span></span><span>${Math.round(p * 100)}%</span></div><div class="bar"><div style="width:${p * 100}%;background:${TOPICS[k].color}"></div></div>`;
-    row.querySelector('span').textContent = TOPICS[k].name;
+    row.querySelector('span').textContent = g.topicName ? g.topicName(k) : TOPICS[k].name;
     probs.appendChild(row);
   });
   const dsun = $('dsun');
@@ -869,8 +898,11 @@ function openDetail(it) {
     dsun.innerHTML = '<option value="">Let the net suggest</option>' + g.suns.filter(x => !x.virtual).map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
     dsun.value = it.chosen ? it.sun : '';
   } else {
-    dsun.innerHTML = '<option value="">Let the net decide</option>' + TOPICS.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
-    dsun.value = it.userTopic || '';
+    const own = g.suns.filter(x => x.custom);
+    dsun.innerHTML = '<option value="">Let the net decide</option>'
+      + (own.length ? '<optgroup label="Your suns">' + own.map(x => `<option value="sun:${esc(x.id)}">${esc(x.name)}</option>`).join('') + '</optgroup><optgroup label="The net\'s topics">' : '')
+      + TOPICS.map((t, k) => `<option value="${t.id}">${esc(g.topicName(k))}</option>`).join('') + (own.length ? '</optgroup>' : '');
+    dsun.value = s.custom ? 'sun:' + s.id : it.userTopic || '';
   }
   $('dgalaxy').innerHTML = model.galaxies.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');
   $('dgalaxy').value = it.g;
@@ -919,7 +951,11 @@ function updateItem(fn) {
 }
 $('dsun').onchange = e => {
   const v = e.target.value, manual = findGalaxy(selected.g).mode === 'manual';
-  updateItem(d => { if (manual) { if (v) d.sun = v; else delete d.sun; } else { if (v) d.userTopic = v; else delete d.userTopic; } });
+  updateItem(d => {
+    if (manual) { if (v) d.sun = v; else delete d.sun; return; }
+    delete d.sun; delete d.userTopic;              // net-sorted galaxy: one of your suns, or teach a topic
+    if (v.startsWith('sun:')) d.sun = v.slice(4); else if (v) d.userTopic = v;
+  });
 };
 $('dgalaxy').onchange = e => { const v = e.target.value; updateItem(d => { d.galaxy = v; delete d.sun; }); closeDetail(); };
 $('remove').onclick = () => {

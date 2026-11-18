@@ -17,6 +17,10 @@ once to load three.js from a CDN.
 2. **Galaxy.** Each sun is a sub-category. A galaxy works in one of two ways:
    - **Net-sorted:** the suns are the net's topics, laid out from philosophy (left) to practical
      analysis (right). They appear as items land in them.
+   - In either kind, **New sun** adds a sun of your own, and **Rename** sits beside every sun in the
+     list. Renaming one of the net's topic suns changes its name in that galaxy only. In a
+     net-sorted galaxy, only you put planets in your own suns, and deleting one hands its planets
+     back to the net.
    - **Named suns:** you create and name the suns. When you add something without choosing a sun,
      the net suggests one by comparing it with what you've already placed in each.
 3. **Solar system.** Each planet is a note or quote. Quotes wear a ring, and longer passages are
